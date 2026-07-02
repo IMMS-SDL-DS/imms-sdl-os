@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# 실험 로그 및 민감 데이터
+logs/
+data/raw/
+*.log
+*.csv
+*.json
+!data/schema/*.json
+
+# 환경 변수 (DB 접속 정보 등)
+.env
+.env.*
+config/secrets.yaml
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

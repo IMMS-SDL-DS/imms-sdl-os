@@ -1,0 +1,28 @@
+{
+  "_comment": "MOF 실험 데이터 표준 스키마 (AlabOS / ChemOS 2.0 참고)",
+  "experiment": {
+    "id": "string (UUID)",
+    "timestamp": "ISO 8601",
+    "device_id": "string",
+    "operator": "string",
+    "status": "pending | running | completed | failed",
+    "conditions": {
+      "temperature_C": "float",
+      "pressure_atm": "float",
+      "concentration_M": "float",
+      "solvent": "string",
+      "reaction_time_min": "float"
+    },
+    "results": {
+      "yield_percent": "float",
+      "purity_percent": "float",
+      "xrd_peaks": "list[float]",
+      "spectrum_file": "string (path)"
+    },
+    "metadata": {
+      "notes": "string",
+      "tags": "list[string]",
+      "next_experiment_suggested": "boolean"
+    }
+  }
+}
