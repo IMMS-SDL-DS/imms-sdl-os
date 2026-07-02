@@ -1,8 +1,8 @@
 # 🧪 IMMS SDL-OS — Self-Driving Laboratory Operating System
 
 > **이화여자대학교 IMMS (Institute for Multiscale Materials and Systems)**  
-> 국가연구소(NRL 2.0) 학부 인턴 연구 기록  
-> 연구자: [이름] | 소속: 데이터사이언스학과 | 기간: 2025.07 – 2025.08
+> 국가연구소(NRL 2.0) 1기 학부 인턴 연구 기록  
+> 연구자: 손시영 | 소속: 데이터사이언스학과 | 기간: 2025.07 – 2025.08
 
 ---
 
