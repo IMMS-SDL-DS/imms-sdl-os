@@ -69,6 +69,6 @@ imms-sdl-os/
 
 ## 🔗 관련 기관
 
-- [IMMS 공식 사이트](https://sites.google.com/view/i-imms-2026)
+- [IMMS 공식 사이트][(https://sites.google.com/view/i-imms-2026)](https://imms.ewha.ac.kr/)
 - [나종걸 교수 연구실](https://nagroup.ewha.ac.kr/)
 - 이화여자대학교 화공신소재공학과
