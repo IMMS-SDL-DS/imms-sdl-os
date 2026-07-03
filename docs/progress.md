@@ -44,7 +44,7 @@
 - 6개 SDL 실제 검증, 진입장벽 최소화
 
 ### 깨달은 점
-> - AlabOS의 DAG 구조 + ChemOS 2.0의 표준화된 DB 설계를
+- AlabOS의 DAG 구조 + ChemOS 2.0의 표준화된 DB 설계를
   Prefect로 구현하는 게 해당 연구실에서 내 역할의 핵심
 - device/job/devicelog 세 테이블이 핵심 뼈대
   → MOF XRD 실험에 맞게 변형하는 게 첫 번째 과제구나...
