@@ -261,3 +261,31 @@
 - Phoenics: ChemOS 팀이 직접 만든 BO 알고리즘.
   탐색(exploration)과 활용(exploitation) 균형 조절 가능
 - FIFO (First-In-First-Out): 먼저 들어온 요청을 먼저 처리하는 방식
+
+## OCTOPUS — Yoo et al., Nature Communications 2024
+
+**핵심 아이디어**
+> MAP(Material Acceleration Platform)을 여러 사용자가 동시에 쓸 때 발생하는 자원 충돌(모듈 겹침, 장비 충돌) 문제를 해결하기 위한 운영체제.
+- 구조 : **Interface Node(사용자 요청 접수) → Master Node(스케줄링·작업 관리) → Module Node(실제 장비 제어)**의 3단 계층
+- Master Node 안에서 job scheduler, task generator, task scheduler, action translator, action executor, resource manager가 협업해 closed-loop 실험을 수행함
+-  핵심 기여는 "User-optimal Scheduler"로, ① job parallelization(장비 대기시간 활용한 작업 병렬화), ② masking table 기반 task optimization(장비 충돌 방지), ③ closed-packing schedule(CPS, 자원 낭비 최소화하는 배치 분할)
+- 세 기법을 결합해 FCFS 대비 대기시간을 대폭 줄인다. 추가로 GPT 기반 "Copilot of OCTOPUS"로 신규 실험 모듈 등록 코드를 자동 생성하도록..
+
+**내 연구에 적용할 부분**
+>  이 논문은 Platform > Module > Task > Action 4단계로 용어를 명확히 나눔
+- 스키마의 Experiment/Task/Device/Sample과 매핑해보면: Experiment ≈ Job(또는 Platform 수준), 지금 Task 컬렉션은 사실 Module 단위인지 Task 단위인지 다시 확인 필요함
+-  예를 들어 "BatchSynthesis"가 Module이면, 그 안의 "AddSolution", "Stir", "React"가 실제 Task임. 이 구분을 스키마에 반영하면 Task 컬렉션에 module_type 필드를 추가하는 게 좋을 듯하다!
+- Device 상태 관리: Resource Manager가 Device Status Table(True=사용중/False=유휴)을 실시간 갱신하는 구조. Device 컬렉션에 status: busy/idle뿐 아니라 마지막 갱신 시각(heartbeat 개념)도 넣으면 장비 연결 담당에 바로 쓸 수 있을 것이라 기대됨.
+- Task의 execution time vs standby time 분리: 예를 들어 "React" 태스크는 장비가 실제로 움직이는 시간이 아니라 대기(반응 진행) 시간이 대부분이구나
+  -> Task 컬렉션에 device_execution_time과 device_standby_time을 따로 기록하면 나중에 Prefect 파이프라인에서 병렬화 최적화(job parallelization)를 구현할 여지가 생길 것 같음
+- Masking Table 아이디어: Task별로 어떤 Device가 필요한지 Boolean 테이블로 미리 정의해두는 방식. Task 컬렉션에 required_devices: [device_id] 필드로 단순화해서 넣으면, 나중에 두 Task가 동시에 같은 Device를 쓰려 할 때 충돌 체크에 활용 가능.
+- Task Template + Pydantic 검증: 논문에서 실제로 Pydantic으로 JSON 데이터 타입 검증을 함 — 지금 셩이가 하려는 스택(Prefect + MongoDB)과 정확히 맞아떨어짐. Task의 parameters 필드는 Pydantic 모델로 미리 스키마화해두는 게 논문에서 검증된 방식.
+- Job/Queue 개념: waiting/executing/holding 3개 큐 구조는 지금 당장 구현 안 해도 되지만, Task의 status enum에 holding(안전 문제로 보류) 상태를 추가해두면 나중에 자동화 안전장치 만들 때 유용.
+
+**모르는 용어 정리**
+- CPS (Closed-Packing Schedule): 하나의 Job(배치)을 여러 개의 작은 배치로 쪼개서, 남은 장비 자원(예: 교반기의 빈 자리)에 딱 맞게 채워 넣는 스케줄링 알고리즘.
+- FCFS (First-Come-First-Served): 제출 순서대로 처리하는 가장 단순한 스케줄링 방식. 논문에서 비교 대상(baseline)으로 사용됨.
+- Masking Table: 특정 Task 실행에 어떤 Device가 필요한지를 True/False로 표시한 표. Device 상태표와 AND 연산해서 다음 Task 실행 가능 여부를 판단.
+- Job Turnaround Time / Job Waiting Time / Job Total Time: 각각 "작업 시작~완료까지 걸린 시간", "제출~시작까지 대기한 시간", 둘의 합. 스케줄러 성능 비교 지표.
+- TCP/IP vs UDP (heartbeat): TCP/IP는 실제 명령 전송에, UDP 기반 heartbeat(주기적 신호)는 장비 연결이 물리적으로 끊겼는지 감시하는 데 사용됨.
+- Auth0: 사용자 인증/로그인 보안을 처리하는 외부 API 서비스 (Interface Node에서 사용).
