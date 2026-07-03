@@ -19,16 +19,20 @@
 - Python with 문으로 구현 → 실패해도 자동 반납
 
 
-④ Manager-Worker 구조
-[대시보드] ← 사람이 명령
-     ↓
-[Experiment Manager] → 실험을 Task 그래프로 파싱
-[Task Manager]       → Task 실행·모니터링
-[Resource Manager]   → 장비 예약·충돌 방지
-[Device Manager]     → 실제 장비에 명령 전달
-     ↓
-[Task Actor]         → 실제로 Task 실행하는 일꾼
-Manager들은 MongoDB로 서로 소통. 사람은 웹 대시보드에서 모니터링.
+> Manager-Worker 구조
+
+| 레이어 | 구성요소 | 역할 |
+|--------|----------|------|
+| 👤 사용자 | **대시보드 (Web GUI)** | 실험 제출·모니터링·취소 |
+| 🧠 Manager | **Experiment Manager** | 실험 요청을 Task 그래프(DAG)로 파싱 |
+| 🧠 Manager | **Task Manager** | Task 실행 순서 관리·상태 모니터링 |
+| 🧠 Manager | **Resource Manager** | 장비 예약·충돌 방지 (선착순 배정) |
+| 🧠 Manager | **Device Manager** | 실제 장비에 명령 전달 (중간 레이어) |
+| ⚙️ Worker | **Task Actor** | 개별 Task를 실제로 실행하는 일꾼 |
+| 🗄️ 공통 | **MongoDB** | Manager들 간 상태 공유·실시간 동기화 |
+
+> Manager들은 MongoDB를 통해 서로 소통하며,
+> Task Actor는 Resource Manager에게 장비를 예약한 뒤 Device Manager를 통해 장비를 제어한다.
 
 
 "🔗AlabOS가 하는 걸 Prefect + MongoDB로 구현하는 게 나의 역할이구나."
