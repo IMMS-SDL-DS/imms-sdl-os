@@ -37,6 +37,11 @@
 - SiLA2로 모든 장비 통신 표준화 → 새 장비 추가가 쉬워짐
 - Atlas BO 내장 → AI가 다음 실험 조건 자동 제안
 - 점진적 도입 가능 → 장비 하나씩 붙여나가는 전략
+> IvoryOS 핵심 요약
+- Python 코드 → 자동 웹 UI 생성 (코드 1줄)
+- 3단계 워크플로우: Prep → Experiment → Cleanup
+- 3가지 실행 모드: Repeat / Configurable / BO 자동화
+- 6개 SDL 실제 검증, 진입장벽 최소화
 
 ### 깨달은 점
 > - AlabOS의 DAG 구조 + ChemOS 2.0의 표준화된 DB 설계를
@@ -53,10 +58,29 @@
 - [x] Tom et al. SDL 리뷰 (2024) — Chemical Reviews
 
 ### 배운 것
--
+> ChemOS 원조 핵심 요약
+- SDL OS 개념의 시작점 (2020)
+- 6개 독립 모듈 + 중앙 워크플로우 관리자 구조
+- Bayesian BO로 AI가 다음 실험 조건 자동 제안
+- 실제 pH 7.0 목표 → 17번째 실험에서 7.001 달성
+  
 
-### 막혔던 것 & 해결
--
+> UniLabOS 핵심 요약
+- A/R/A&R로 모든 실험실 요소 추상화
+- Dual-Topology: 논리 트리 + 물리 그래프
+- CRUTD: 물질 이동을 트랜잭션으로 관리
+- 분산 엣지-클라우드, 네트워크 장애에도 실험 지속
+
+### 전체 논문 최종 정리
+원조 ChemOS(2020) → AlabOS + ChemOS 2.0(2024)
+→ IvoryOS + UniLabOS(2025)
+→ 우리 연구실 SDL OS (Prefect 기반)
+
+### 앞으로 나의 역할
+"UniLabOS의 A/R/A&R + CRUTD 개념,
+AlabOS의 DAG 워크플로우,
+ChemOS 2.0의 표준화된 DB 설계를
+Prefect + MongoDB로 MOF 실험에 구현하는 것"
 
 ### 더 해볼 것
 - [ ] Prefect 설치 후 example_flow.py 실행
