@@ -16,7 +16,6 @@ data/raw/
 *.csv
 *.json
 !data/schema/*.json
-!data/protocols/*.json
 
 # 환경 변수 (DB 접속 정보 등)
 .env
@@ -35,3 +34,5 @@ config/secrets.yaml
 # OS
 .DS_Store
 Thumbs.db
+
+!.env.example

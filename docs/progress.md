@@ -125,3 +125,32 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 - [ ] 실제 장비(Opentron Flex 등) Python API 연결
 - [ ] Device 상태 실시간 갱신 로직 (idle/busy) 구현
 
+---
+
+## Day 5 — MongoDB Atlas 연결 (2026.7.7)
+
+### 한 일
+- [x] MongoDB Atlas(클라우드) 클러스터 재개 및 연결 문자열 확인
+- [x] `.env` / `.env.example` 로 접속 정보 분리 (비밀번호는 git에 안 올라가게)
+- [x] `src/database/mongo_client.py` 작성:
+      - `.env` 읽어서 Atlas 연결, ping으로 연결 확인
+      - `mongo_schema_v2.json` validator로 4개 컬렉션 생성/갱신
+      - Experiment/Task/Device/Sample Pydantic 모델을 upsert하는 저장 헬퍼
+      - `get_sample_lineage()` — Sample 하나의 Provenance(어느 Task가 만들었고 어디에 쓰였는지) 역추적
+- [x] `zr_btc_synthesis_flow.py`가 실제로 Task를 MongoDB에 저장하도록 연결
+      (`.env` 없어도 자동으로 시뮬레이션 모드로 fallback 되게 처리함)
+- [x] 테스트 7개 전부 통과 확인
+
+### 겪은 문제 (트러블슈팅)
+- Git Bash에서 `cd` 없이 홈 디렉토리에서 `git init`을 실행해서 VS Code 앱 데이터까지
+  스캔하려던 사고 발생 → `.git` 폴더 위치 잘못됨을 `pwd`로 확인 후 삭제, 올바른 clone 폴더로 이동해서 해결
+- `.gitignore`에 `*.json` 전체 무시 규칙이 있어서 `data/protocols/*.json`이 계속 안 올라감
+  → `!data/protocols/*.json` 예외 규칙 추가
+- `git push` 시 origin에 로컬에 없는 커밋이 있어 rejected → `git pull` 후
+  `docs/paper-notes.md`에서 merge conflict 발생 (선배가 추가한 내용과 충돌) →
+  `<<<<<<<`/`=======`/`>>>>>>>` 마커만 제거하고 양쪽 내용 다 살려서 해결
+
+### 다음에 할 것
+- [ ] 실제 장비(Opentron Flex 등) Python API 연결
+- [ ] Device 상태 실시간 갱신 로직 (idle/busy) 구현
+

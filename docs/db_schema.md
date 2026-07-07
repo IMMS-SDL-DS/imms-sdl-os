@@ -162,7 +162,17 @@ Experiment
 - [x] Unit Operation Schema를 Pydantic 모델로 구현 (`src/database/models.py`)
 - [x] 실제 프로토콜을 JSON 데이터로 구조화 (`data/protocols/zr_btc_mof_protocol.json`)
 - [x] Prefect flow로 전체 프로토콜 실행 테스트 (`src/pipeline/zr_btc_synthesis_flow.py`, 시뮬레이션 모드)
-- [ ] MongoDB 실제 연결 (pymongo) 후 `mongo_schema_v2.json` validator 적용
+- [x] MongoDB Atlas 연결 (`src/database/mongo_client.py`) — `.env` 설정 후 실제 저장 확인
 - [ ] 실제 장비 Python API 연결 (`execute_step()` 안의 `[SIM]` 부분 교체)
 - [ ] Device 상태(idle/busy) 실시간 갱신 → 여러 실험 병렬 실행 시 충돌 방지 로직
 - [ ] XRD 파일 자동 파싱 후 `sample.properties`에 저장
+
+### MongoDB 연결 사용법
+```bash
+cp .env.example .env
+# .env 열어서 MONGODB_URI, MONGODB_DB_NAME 채우기 (Atlas Connect 화면에서 복사)
+
+python -m src.database.mongo_client        # 연결 테스트 + 컬렉션/인덱스 생성
+python -m src.pipeline.zr_btc_synthesis_flow  # 실제 DB에 저장하며 프로토콜 실행
+```
+`.env`가 없거나 연결에 실패해도 flow 자체는 시뮬레이션 모드로 계속 진행됩니다 (`save_to_db=False`로 명시적으로 끌 수도 있음).

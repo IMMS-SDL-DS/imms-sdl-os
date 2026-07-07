@@ -289,6 +289,7 @@
 - Job Turnaround Time / Job Waiting Time / Job Total Time: 각각 "작업 시작~완료까지 걸린 시간", "제출~시작까지 대기한 시간", 둘의 합. 스케줄러 성능 비교 지표.
 - TCP/IP vs UDP (heartbeat): TCP/IP는 실제 명령 전송에, UDP 기반 heartbeat(주기적 신호)는 장비 연결이 물리적으로 끊겼는지 감시하는 데 사용됨.
 - Auth0: 사용자 인증/로그인 보안을 처리하는 외부 API 서비스 (Interface Node에서 사용).
+
 ---
 
 ## 지식그래프 기반 소재 공정 및 합성 이론 (리서치 리포트)
