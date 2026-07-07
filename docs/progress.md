@@ -94,8 +94,8 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 ## Day 4 — 실제 MOF 프로토콜 기반 스키마 v2 (2026.7.7)
 
 ### 계기
-- 실험팀 노션에서 실제 MOF 실험 프로세스 문서를 못 찾음 → 선배한테 문의
-- 선배가 실제 프로토콜 PDF(`MOF_실험_공정팀_final.pdf`, Zr-BTC MOF Synthesis)를 공유해줌
+- 실험팀 노션에서 실제 MOF 실험 프로세스 문서를 못 찾음 → 기존 MOF 실험 과정 공유받음
+- 실제 프로토콜 PDF(`MOF_실험_공정팀_final.pdf`, Zr-BTC MOF Synthesis) 저장
 - 추가로 OCTOPUS 논문(장비 스케줄링/멀티유저 SDL OS)과
   지식그래프 기반 소재 합성 이론 리포트(ActionGraph 등)도 참고
 
@@ -147,10 +147,12 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 - `.gitignore`에 `*.json` 전체 무시 규칙이 있어서 `data/protocols/*.json`이 계속 안 올라감
   → `!data/protocols/*.json` 예외 규칙 추가
 - `git push` 시 origin에 로컬에 없는 커밋이 있어 rejected → `git pull` 후
-  `docs/paper-notes.md`에서 merge conflict 발생 (선배가 추가한 내용과 충돌) →
+  `docs/paper-notes.md`에서 merge conflict 발생 (논문 정리했던 내용 중의 일부 head 등 충돌) →
   `<<<<<<<`/`=======`/`>>>>>>>` 마커만 제거하고 양쪽 내용 다 살려서 해결
-
+- mongodb 접속시 실시간 ip 주소를 계속 허용해줘야함!!
+  SSL 에러도 ip 허용으로 인해 발생하는 경우 많다고 함.
+  
 ### 다음에 할 것
-- [ ] 실제 장비(Opentron Flex 등) Python API 연결
+- [ ] 실제 장비(Opentron Flex 등) Python API 연결 <- 장비 접근 권한 확인 필요,,
 - [ ] Device 상태 실시간 갱신 로직 (idle/busy) 구현
 
