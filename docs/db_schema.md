@@ -1,110 +1,168 @@
-# 🗄️ MOF 실험 DB 스키마 설계
+# 🗄️ MOF 실험 DB 스키마 설계 (v2)
 
-> ChemOS 2.0의 device/job/devicelog 구조를 기반으로  
-> MOF 실험 데이터에 맞게 확장한 스키마 초안
-
----
-
-## 설계 원칙
-
-1. **범용성** — 어떤 MOF 실험에도 적용 가능
-2. **추적 가능성** — 실험 조건·결과·장비 상태 전부 기록
-3. **AI 친화적** — 바로 학습에 쓸 수 있는 정형 데이터
-4. **FAIR 원칙** — Findable, Accessible, Interoperable, Reusable
+> v1(초기 일반 초안)은 AlabOS/ChemOS 2.0 구조만 참고한 추측 기반 설계였음.
+> v2는 실험팀이 공유해준 **실제 프로토콜**(`MOF_실험_공정팀_final.pdf`, Zr-BTC MOF Synthesis, 26.01.28~29)을
+> 그대로 반영해서 다시 짠 버전. v1 문서는 [`docs/archive/db_schema_v1.md`](archive/db_schema_v1.md)에 보존.
 
 ---
 
-## 핵심 테이블 구조
+## 설계 근거
 
-### 1. `experiment` — 실험 단위
+1. **OCTOPUS** (Yoo et al., *Nat. Commun.* 2024) — Platform > Module > Task > Action 계층,
+   장비별 masking table로 충돌 방지 → `Device.shared_phases`, `Task.required_device_type()`
+2. **ActionGraph** (arXiv 2512.02947) — 합성 레시피를 DAG로 표현.
+   Node = 물질/조건/장치, Edge = Association(조작↔대상) + Reference(이전 output → 다음 input)
+   → `Task.input_refs` / `Task.output_refs`
+3. **실험팀 프로토콜** §4 Unit Operation Schema (OP-01~OP-19), §5 Variable Schema
+   → `src/database/models.py`의 `OperationType` enum + operation별 Pydantic 파라미터 모델로 그대로 이식
+
+실제 데이터는 `data/protocols/zr_btc_mof_protocol.json`에, 파이썬 모델은
+`src/database/models.py`에, 이를 실행하는 Prefect flow는
+`src/pipeline/zr_btc_synthesis_flow.py`에 있음.
+
+---
+
+## 4개 핵심 컬렉션
+
+### 1. `experiment` — 실험 캠페인 단위
+
 ```python
 {
-    "experiment_id": "MOF-2025-001",
-    "created_at": "2025-07-01T09:00:00",
-    "status": "pending | running | completed | failed",
+    "experiment_id": "exp_zrbtc_001",
+    "name": "Zr-BTC MOF Synthesis",
+    "protocol_version": "26.01.28~26.01.29",
+    "target_material": "Zr-BTC MOF",
     "researcher": "손시영",
-    "target_material": "IRMOF-1",
-    "notes": ""
+    "status": "planned | running | completed | failed | held",
+    "reagents": [
+        { "name": "ZrOCl2", "role": "Metal Source", "amount": "97 mg",
+          "dispense_device": "Solid Dispenser", "notes": "산화 주의, Desiccator 보관" }
+    ],
+    "phase_sequence": ["A", "B", "C", "D", "E", "F", "G"],
+    "notes": ["Phase D-1: 혼합 순서(L→M) 반드시 준수 — 역순 시 부산물 생성"]
 }
 ```
 
-### 2. `condition` — 실험 조건
+### 2. `task` — 프로토콜의 개별 Step 1개 (예: "D-1")
+
 ```python
 {
-    "experiment_id": "MOF-2025-001",
-    "temperature_c": 120,
-    "reaction_time_h": 24,
-    "solvent": "DMF",
-    "metal_source": "Zn(NO3)2",
-    "linker": "BDC",
-    "concentration_mm": 50,
-    "volume_ml": 10
+    "task_id": "exp_zrbtc_001_D-1",
+    "experiment_id": "exp_zrbtc_001",
+    "phase": "D",
+    "step_code": "D-1",
+    "operation": "TRANSFER",
+    "parameters": { "source": "ligand_sol", "dest": "metal_sol",
+                     "volume_ml": None, "order_critical": True },
+    "device_id": "dev_opentron_flex",
+    "input_refs": ["sample_ligand_sol", "sample_metal_sol"],
+    "output_refs": ["sample_rxn_mixture"],
+    "order_critical": True,
+    "status": "pending | running | success | failed | held",
+    "actual_values": {},
+    "prefect_task_run_id": None
 }
 ```
 
-### 3. `result` — 실험 결과
+**Task ↔ Module/Phase 매핑**: OCTOPUS 논문에서 헷갈렸던 "Task 컬렉션이 Module 단위인지 Task 단위인지" 문제는
+실제 프로토콜을 보니 명확해짐 — **Phase(A~G) = OCTOPUS의 Module, Step(A-1, B-2...) = OCTOPUS의 Task**.
+`Task.phase` 필드로 이 계층을 표현.
+
+**Unit Operation 목록** (OP-01~OP-19, `src/database/models.py`의 `OperationType`):
+
+| OP ID | Operation | 필요 장비 타입 |
+|---|---|---|
+| OP-01 | DISPENSE_SOLID | solid_dispenser |
+| OP-02 | VERIFY_MASS | balance |
+| OP-03 | DISPENSE | liquid_handler |
+| OP-04 | TRANSFER | liquid_handler |
+| OP-05 | DECANT | liquid_handler/manual |
+| OP-06 | MIX | liquid_handler |
+| OP-07 | SONICATE | sonicator |
+| OP-08 | CENTRIFUGE | centrifuge |
+| OP-09 | VORTEX | vortex_mixer |
+| OP-10 | BALANCE_CHECK | balance |
+| OP-11 | SEAL | manual |
+| OP-12 | HEAT | heater |
+| OP-13 | DRY | manual |
+| OP-14 | SAMPLE | manual |
+| OP-15 | ANALYZE_XRD | xrd |
+| OP-16 | REPEAT | - |
+| OP-17 | SOLVENT_CHANGE | liquid_handler |
+| OP-18 | GRIND | manual |
+| OP-19 | ANALYZE_OM | optical_microscope |
+
+### 3. `device` — 연결된 장비
+
 ```python
 {
-    "experiment_id": "MOF-2025-001",
-    "yield_percent": 85.3,
-    "purity": "high | medium | low",
-    "xrd_file_path": "data/xrd/MOF-2025-001.xy",
-    "surface_area_m2g": 1200,
-    "characterization_notes": ""
+    "device_id": "dev_opentron_flex",
+    "name": "Opentron Flex",
+    "device_type": "liquid_handler",
+    "connection": "python_api",
+    "shared_phases": ["A", "B", "C", "D", "F", "G"],
+    "status": "idle | busy | offline | maintenance",
+    "last_used_at": None
 }
 ```
 
-### 4. `device` — 연결된 장비
+> Opentron Flex가 Phase A~D, F, G에 걸쳐 반복 사용됨 (DISPENSE, TRANSFER, MIX, DECANT, SOLVENT_CHANGE).
+> 여러 실험을 병렬로 돌릴 경우 이 장비를 쓰는 Task끼리는 반드시 직렬화해야 함 (OCTOPUS의 masking table 개념).
+
+### 4. `sample` — 중간/최종 산출물
+
 ```python
 {
-    "device_id": "XRD-001",
-    "device_type": "XRD",
-    "model": "Rigaku MiniFlex",
-    "status": "idle | busy | error",
-    "last_calibrated": "2025-07-01"
+    "sample_id": "sample_rxn_mixture",
+    "experiment_id": "exp_zrbtc_001",
+    "sample_code": "rxn_mixture",
+    "sample_type": "solution | slurry | solid | xrd_data | om_data",
+    "produced_by_task_id": "exp_zrbtc_001_D-1",
+    "consumed_by_task_ids": ["exp_zrbtc_001_D-2"],
+    "properties": {}
 }
 ```
 
-### 5. `job` — 장비 작업 큐
-```python
-{
-    "job_id": "JOB-001",
-    "experiment_id": "MOF-2025-001",
-    "device_id": "XRD-001",
-    "status": "queued | running | done | failed",
-    "started_at": None,
-    "completed_at": None
-}
-```
-
-### 6. `devicelog` — 장비 실행 기록
-```python
-{
-    "log_id": "LOG-001",
-    "job_id": "JOB-001",
-    "timestamp": "2025-07-01T10:30:00",
-    "message": "XRD scan started",
-    "level": "INFO | WARNING | ERROR"
-}
-```
+sample_code 예시: `homo_solution`, `metal_sol`, `ligand_sol`, `rxn_mixture`, `MOF_slurry`,
+`xrd_result_1`, `dmf_washed`, `washed_MOF`, `xrd_result_final`
 
 ---
 
-## 관계도
+## 관계도 (ActionGraph 스타일 DAG)
 
 ```
-experiment
-    ├── condition (1:1)
-    ├── result    (1:1)
-    └── job       (1:N)
-            ├── device   (N:1)
-            └── devicelog (1:N)
+Experiment
+    └── Task (Phase A~G, Step 단위)
+            ├── Device        (N:1, required_device_type()로 검증)
+            ├── input_refs  → Sample (이전 Task의 output)     ─┐
+            └── output_refs → Sample (이 Task의 산출물)        ├─ Reference Edge
+                                                                 ┘
 ```
+
+예: `D-1 TRANSFER` → input: `ligand_sol`, `metal_sol` / output: `rxn_mixture`
+→ `D-3 HEAT` → input: `rxn_mixture` / output: `MOF_slurry`
+→ `E-1 SAMPLE` → input: `MOF_slurry` / output: (XRD holder로 이동)
+
+---
+
+## 실전 반영 사항 (v1 → v2 변경 이유)
+
+| 항목 | v1 (추측 기반) | v2 (실제 프로토콜 기반) |
+|---|---|---|
+| Task 단위 | 불명확 (Module인지 Step인지) | Phase=Module, Step=Task로 명확화 |
+| Parameter 검증 | 자유 dict | Operation별 Pydantic 모델 (`OPERATION_PARAM_MODEL`) |
+| 순서 제약 | 없음 | `order_critical` 필드 (D-1 TRANSFER 순서 위반 방지) |
+| 반복 처리 | 없음 | `REPEAT` operation + `repeat_of` 필드 (Washing 3회 반복) |
+| Sample 흐름 추적 | 없음 | `input_refs`/`output_refs`로 Reference Edge 표현 |
+| Device 공유 문제 | 없음 | `shared_phases`로 Opentron Flex 등 공유 장비 명시 |
 
 ---
 
 ## TODO
-- [ ] MongoDB 컬렉션으로 구현
-- [ ] Prefect flow와 연동 테스트
-- [ ] XRD 파일 자동 파싱 후 result에 저장
-- [ ] 실험 조건 → 결과 그래프(Knowledge Graph) 변환
+- [x] Unit Operation Schema를 Pydantic 모델로 구현 (`src/database/models.py`)
+- [x] 실제 프로토콜을 JSON 데이터로 구조화 (`data/protocols/zr_btc_mof_protocol.json`)
+- [x] Prefect flow로 전체 프로토콜 실행 테스트 (`src/pipeline/zr_btc_synthesis_flow.py`, 시뮬레이션 모드)
+- [ ] MongoDB 실제 연결 (pymongo) 후 `mongo_schema_v2.json` validator 적용
+- [ ] 실제 장비 Python API 연결 (`execute_step()` 안의 `[SIM]` 부분 교체)
+- [ ] Device 상태(idle/busy) 실시간 갱신 → 여러 실험 병렬 실행 시 충돌 방지 로직
+- [ ] XRD 파일 자동 파싱 후 `sample.properties`에 저장

@@ -1,0 +1,100 @@
+{
+  "_comment": "MOF 실험팀 제공 프로토콜(26.01.28~26.01.29)을 구조화한 원본 데이터. src/database/models.py의 Task 모델로 그대로 로드 가능.",
+  "protocol_name": "Zr-BTC MOF Synthesis Protocol",
+  "protocol_version": "26.01.28~26.01.29",
+  "target_material": "Zr-BTC MOF",
+  "reagents": [
+    { "name": "ZrOCl2", "role": "Metal Source", "amount": "97 mg", "dispense_device": "Solid Dispenser", "notes": "산화 주의, Desiccator 보관" },
+    { "name": "BTC (Trimesic Acid)", "role": "Organic Linker", "amount": "21 mg", "dispense_device": "Solid Dispenser", "notes": null },
+    { "name": "DMF", "role": "Solvent", "amount": "3 mL", "dispense_device": "Opentron Flex", "notes": "Washing에도 사용" },
+    { "name": "Acetone", "role": "Washing Solvent", "amount": "~30 mL", "dispense_device": "Opentron Flex", "notes": "DMF 후 2차 세척" },
+    { "name": "Formic Acid", "role": "Modulator", "amount": "3 mL", "dispense_device": "Opentron Flex", "notes": "후드 내 취급, 내산성 팁 사용 필요" }
+  ],
+  "devices": [
+    { "name": "Opentron Flex", "device_type": "liquid_handler", "connection": "python_api", "shared_phases": ["A", "B", "C", "D", "F", "G"] },
+    { "name": "Mettler Toledo", "device_type": "balance", "connection": "python_api", "shared_phases": ["B", "C", "F"] },
+    { "name": "Solid Dispenser", "device_type": "solid_dispenser", "connection": "python_api", "shared_phases": ["B", "C"] },
+    { "name": "Centrifuge", "device_type": "centrifuge", "connection": "onoff_param", "shared_phases": ["F"] },
+    { "name": "Vortex Mixer", "device_type": "vortex_mixer", "connection": "onoff_param", "shared_phases": ["F"] },
+    { "name": "Sonicator", "device_type": "sonicator", "connection": "onoff_param", "shared_phases": ["B", "C"] },
+    { "name": "Oven / Heating Block", "device_type": "heater", "connection": "onoff_param", "shared_phases": ["D"] },
+    { "name": "XRD", "device_type": "xrd", "connection": "manual", "shared_phases": ["E", "G"] },
+    { "name": "Optical Microscope", "device_type": "optical_microscope", "connection": "manual", "shared_phases": ["G"] }
+  ],
+  "phases": [
+    {
+      "phase": "A", "title": "용액 준비 (Solvent Mixture)",
+      "steps": [
+        { "step_code": "A-1", "operation": "DISPENSE", "parameters": { "reagent": "DMF", "volume_ml": 3.0, "vessel": "Cylinder" }, "device": "Opentron Flex", "output": null },
+        { "step_code": "A-2", "operation": "DISPENSE", "parameters": { "reagent": "Formic Acid", "volume_ml": 3.0, "vessel": "Cylinder" }, "device": "Opentron Flex", "output": null },
+        { "step_code": "A-3", "operation": "MIX", "parameters": { "vessel": "Cylinder", "method": "pipette", "cycles": 5 }, "device": "Opentron Flex", "output": "homo_solution" }
+      ]
+    },
+    {
+      "phase": "B", "title": "Metal Solution 제조",
+      "steps": [
+        { "step_code": "B-1", "operation": "DISPENSE_SOLID", "parameters": { "reagent": "ZrOCl2", "mass_mg": 97, "tolerance_mg": 5, "vessel": "Vial_10mL" }, "device": "Solid Dispenser", "output": null },
+        { "step_code": "B-2", "operation": "VERIFY_MASS", "parameters": { "vessel": "Vial_10mL", "expected_mass_mg": 97 }, "device": "Mettler Toledo", "output": "mass_metal" },
+        { "step_code": "B-3", "operation": "TRANSFER", "parameters": { "source": "homo_solution", "dest": "Metal Vial", "volume_ml": 3.0, "order_critical": false }, "device": "Opentron Flex", "output": null },
+        { "step_code": "B-4", "operation": "SONICATE", "parameters": { "vessel": "Vial_10mL", "duration_min": 10 }, "device": "Sonicator", "output": "metal_sol" }
+      ]
+    },
+    {
+      "phase": "C", "title": "Ligand Solution 제조",
+      "steps": [
+        { "step_code": "C-1", "operation": "DISPENSE_SOLID", "parameters": { "reagent": "BTC", "mass_mg": 21, "tolerance_mg": 2, "vessel": "Vial_5mL" }, "device": "Solid Dispenser", "output": null },
+        { "step_code": "C-2", "operation": "VERIFY_MASS", "parameters": { "vessel": "Vial_5mL", "expected_mass_mg": 21 }, "device": "Mettler Toledo", "output": "mass_ligand" },
+        { "step_code": "C-3", "operation": "TRANSFER", "parameters": { "source": "homo_solution", "dest": "Ligand Vial", "volume_ml": 3.0, "order_critical": false }, "device": "Opentron Flex", "output": null },
+        { "step_code": "C-4", "operation": "SONICATE", "parameters": { "vessel": "Vial_5mL", "duration_min": 10 }, "device": "Sonicator", "output": "ligand_sol" }
+      ]
+    },
+    {
+      "phase": "D", "title": "혼합 및 반응",
+      "steps": [
+        { "step_code": "D-1", "operation": "TRANSFER", "parameters": { "source": "ligand_sol", "dest": "metal_sol", "volume_ml": null, "order_critical": true }, "device": "Opentron Flex", "output": "rxn_mixture", "note": "혼합 순서(L→M) 반드시 준수 — 역순 시 부산물 생성" },
+        { "step_code": "D-2", "operation": "SEAL", "parameters": { "vessel": "Vial_10mL", "seal_type": "screw_cap" }, "device": "Manual/Capper", "output": null },
+        { "step_code": "D-3", "operation": "HEAT", "parameters": { "vessel": "Vial_10mL", "temp_c": 120, "duration_h": 24, "mode": "static" }, "device": "Oven (현재) / Heating Block (자동화 예정)", "output": "MOF_slurry", "note": "자동화 전환 시 온도 프로파일/장비 선정 별도 검증 필요" }
+      ]
+    },
+    {
+      "phase": "E", "title": "1차 XRD 확인 (합성 검증)",
+      "steps": [
+        { "step_code": "E-1", "operation": "SAMPLE", "parameters": { "source": "MOF_slurry", "amount": "일부", "dest_holder": "XRD_holder" }, "device": "Manual", "output": null },
+        { "step_code": "E-2", "operation": "DRY", "parameters": { "sample": "MOF_slurry", "method": "filter" }, "device": "Manual", "output": null },
+        { "step_code": "E-3", "operation": "ANALYZE_XRD", "parameters": { "sample_holder": "XRD_holder" }, "device": "XRD", "output": "xrd_result_1" }
+      ]
+    },
+    {
+      "phase": "F", "title": "Washing (세척, 후드 내 진행, DMF/Acetone 각 3회 반복)",
+      "steps": [
+        { "step_code": "F-1", "operation": "TRANSFER", "parameters": { "source": "Vial", "dest": "Conical_15mL", "volume_ml": null, "order_critical": false }, "device": "Opentron/Manual", "output": null },
+        { "step_code": "F-2", "operation": "CENTRIFUGE", "parameters": { "vessel": "Conical_15mL", "rpm": 7830, "duration_min": 2.5 }, "device": "Centrifuge", "output": null, "note": "논문 기준값: 9000rpm, 2min" },
+        { "step_code": "F-3", "operation": "DECANT", "parameters": { "vessel": "Conical_15mL", "waste_container": "Waste_DMF" }, "device": "Opentron/Manual", "output": null },
+        { "step_code": "F-4", "operation": "DISPENSE", "parameters": { "reagent": "DMF", "volume_ml": 10, "vessel": "Conical_15mL" }, "device": "Opentron Flex", "output": null },
+        { "step_code": "F-5", "operation": "VORTEX", "parameters": { "vessel": "Conical_15mL", "duration_sec": 20 }, "device": "Vortex Mixer", "output": null, "note": "육안으로 재분산 확인" },
+        { "step_code": "F-6", "operation": "BALANCE_CHECK", "parameters": { "vessel_pair": ["A", "B"], "tolerance_g": 0.05 }, "device": "Mettler Toledo", "output": null },
+        { "step_code": "F-2~F-6", "operation": "REPEAT", "parameters": { "start_step": "F-2", "end_step": "F-6", "count": 3, "solvent": "DMF" }, "device": null, "output": "dmf_washed" },
+        { "step_code": "F-8", "operation": "SOLVENT_CHANGE", "parameters": { "from_solvent": "DMF", "to_solvent": "Acetone" }, "device": "Opentron Flex", "output": null },
+        { "step_code": "F-2~F-6 (2)", "operation": "REPEAT", "parameters": { "start_step": "F-2", "end_step": "F-6", "count": 3, "solvent": "Acetone" }, "device": null, "output": "washed_MOF" }
+      ]
+    },
+    {
+      "phase": "G", "title": "최종 분석",
+      "steps": [
+        { "step_code": "G-1", "operation": "DECANT", "parameters": { "vessel": "Conical_15mL", "waste_container": "Waste" }, "device": "Opentron/Manual", "output": null },
+        { "step_code": "G-2", "operation": "DRY", "parameters": { "sample": "washed_MOF", "method": "filter" }, "device": "Manual", "output": null, "note": "DMF는 무거워 airgun 지양" },
+        { "step_code": "G-3", "operation": "ANALYZE_XRD", "parameters": { "sample_holder": "XRD_holder" }, "device": "XRD", "output": "xrd_result_final" }
+      ]
+    }
+  ],
+  "global_notes": [
+    "Phase D-1: 혼합 순서 (L→M) 반드시 준수 <역순 시 부산물 생성>",
+    "Phase F: 산을 다룰 때는 반드시 후드 내에서 진행",
+    "원심분리기 Balance: 마주보는 튜브끼리 무게 맞춤 (±0.05g까지 허용)",
+    "무게 맞출 때 물 대신 DMF 추가 (물 사용 시 slurry 손상 가능)",
+    "Sample loss 방지 위해 용액 덜기보다 추가하여 맞춤",
+    "XRD: 용매 잔류 시 peak이 broad하게 나옴 → 충분히 건조",
+    "큰 결정의 경우 빛 조사 위치에 따라 XRD 결과 다름 → OM(Optical Microscope) 병행 권장",
+    "Phase E, G 분석: 현재 Manual → 추후 Robot Arm 검토 필요"
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "_comment": "MOF SDL OS — MongoDB $jsonSchema validators v2. 2026.01 Zr-BTC 프로토콜 기반으로 재설계 (v1: experiment_schema.json 은 참고용으로 보존).",
+  "_reference": "실험팀 제공 'MOF_실험_공정팀_final.pdf' (26.01.28~29) + OCTOPUS(Yoo et al. 2024) masking table 개념 + ActionGraph(arXiv 2512.02947) DAG 개념",
+
+  "experiment": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": ["experiment_id", "name", "target_material", "status"],
+      "properties": {
+        "experiment_id": { "bsonType": "string" },
+        "name": { "bsonType": "string" },
+        "protocol_version": { "bsonType": "string" },
+        "target_material": { "bsonType": "string" },
+        "researcher": { "bsonType": "string" },
+        "status": { "enum": ["planned", "running", "completed", "failed", "held"] },
+        "reagents": {
+          "bsonType": "array",
+          "items": {
+            "bsonType": "object",
+            "required": ["name", "role", "amount"],
+            "properties": {
+              "name": { "bsonType": "string" },
+              "role": { "bsonType": "string" },
+              "amount": { "bsonType": "string" },
+              "dispense_device": { "bsonType": "string" },
+              "notes": { "bsonType": ["string", "null"] }
+            }
+          }
+        },
+        "phase_sequence": { "bsonType": "array", "items": { "bsonType": "string" } },
+        "created_at": { "bsonType": "date" },
+        "notes": { "bsonType": "array", "items": { "bsonType": "string" } }
+      }
+    }
+  },
+
+  "task": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": ["task_id", "experiment_id", "phase", "step_code", "operation", "status"],
+      "properties": {
+        "task_id": { "bsonType": "string" },
+        "experiment_id": { "bsonType": "string" },
+        "phase": { "enum": ["A", "B", "C", "D", "E", "F", "G"] },
+        "step_code": { "bsonType": "string", "description": "원본 프로토콜 Step 코드, 예: 'D-1'" },
+        "operation": {
+          "enum": [
+            "DISPENSE_SOLID", "VERIFY_MASS", "DISPENSE", "TRANSFER", "DECANT",
+            "MIX", "SONICATE", "CENTRIFUGE", "VORTEX", "BALANCE_CHECK", "SEAL",
+            "HEAT", "DRY", "SAMPLE", "ANALYZE_XRD", "REPEAT", "SOLVENT_CHANGE",
+            "GRIND", "ANALYZE_OM"
+          ]
+        },
+        "parameters": { "bsonType": "object", "description": "operation별 Pydantic 모델로 검증된 값 (src/database/models.py 참고)" },
+        "device_id": { "bsonType": ["string", "null"] },
+        "input_refs": { "bsonType": "array", "items": { "bsonType": "string" }, "description": "ActionGraph Reference Edge: 이전 Sample 참조" },
+        "output_refs": { "bsonType": "array", "items": { "bsonType": "string" } },
+        "repeat_of": {
+          "bsonType": ["object", "null"],
+          "properties": {
+            "start_step": { "bsonType": "string" },
+            "end_step": { "bsonType": "string" },
+            "count": { "bsonType": "int" },
+            "solvent": { "bsonType": ["string", "null"] }
+          }
+        },
+        "order_critical": { "bsonType": "bool", "description": "true면 순서 위반 시 flow 강제 중단 (프로토콜 D-1 참고)" },
+        "status": { "enum": ["pending", "running", "success", "failed", "held"] },
+        "actual_values": { "bsonType": "object", "description": "VERIFY_MASS 실측값 등" },
+        "prefect_task_run_id": { "bsonType": ["string", "null"] },
+        "started_at": { "bsonType": ["date", "null"] },
+        "ended_at": { "bsonType": ["date", "null"] }
+      }
+    }
+  },
+
+  "device": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": ["device_id", "name", "device_type", "connection", "status"],
+      "properties": {
+        "device_id": { "bsonType": "string" },
+        "name": { "bsonType": "string" },
+        "device_type": {
+          "enum": [
+            "liquid_handler", "balance", "solid_dispenser", "centrifuge",
+            "vortex_mixer", "sonicator", "heater", "xrd", "optical_microscope", "manual"
+          ]
+        },
+        "connection": { "enum": ["python_api", "onoff_param", "manual"] },
+        "shared_phases": { "bsonType": "array", "items": { "bsonType": "string" }, "description": "이 장비를 쓰는 Phase 목록 (OCTOPUS의 device-sharing 개념)" },
+        "status": { "enum": ["idle", "busy", "offline", "maintenance"] },
+        "last_used_at": { "bsonType": ["date", "null"] }
+      }
+    }
+  },
+
+  "sample": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": ["sample_id", "experiment_id", "sample_code", "sample_type"],
+      "properties": {
+        "sample_id": { "bsonType": "string" },
+        "experiment_id": { "bsonType": "string" },
+        "sample_code": { "bsonType": "string", "description": "예: MOF_slurry, xrd_result_final" },
+        "sample_type": { "enum": ["solution", "slurry", "solid", "xrd_data", "om_data"] },
+        "produced_by_task_id": { "bsonType": ["string", "null"] },
+        "consumed_by_task_ids": { "bsonType": "array", "items": { "bsonType": "string" } },
+        "properties": { "bsonType": "object", "description": "XRD peak 리스트, 실측 mass 등 자유 필드" },
+        "created_at": { "bsonType": "date" }
+      }
+    }
+  }
+}

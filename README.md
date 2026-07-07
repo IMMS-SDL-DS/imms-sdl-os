@@ -1,9 +1,13 @@
 # 🧪 IMMS SDL-OS — Self-Driving Laboratory Operating System
 
 > **이화여자대학교 IMMS (Institute for Multiscale Materials and Systems)**  
-> 국가연구소(NRL 2.0) 학부 인턴 연구 기록  
-> 연구자: [이름] | 소속: 데이터사이언스학과 | 기간: 2025.07 – 2025.08
+> 국가연구소(NRL 2.0) 1기 학부 인턴 연구 기록  
+> 연구자: 손시영 | 소속: 데이터사이언스학과 | 기간: 2025.07 – 2025.08
 
+> **참여 이유**
+    > 화학신소재와 데이터 사이언스의 융합
+    > 실무적인 경험 취득
+    > 국가연구소의 과제에 기여 (이화여대에 큰 규모의 SDL 설립)
 ---
 
 ## 🔬 연구 개요
@@ -24,16 +28,25 @@ imms-sdl-os/
 │
 ├── src/
 │   ├── pipeline/        # Prefect 워크플로우 정의
+│   │   └── zr_btc_synthesis_flow.py   # 실제 Zr-BTC 프로토콜 실행 flow
 │   ├── database/        # DB 스키마 및 연결 모듈
+│   │   └── models.py    # Pydantic 모델 (Experiment/Task/Device/Sample + Unit Operations)
 │   └── device/          # 실험 장치 연결 인터페이스
 │
 ├── notebooks/           # 탐색적 분석 및 실험 노트북
 ├── data/
-│   └── schema/          # DB 스키마 정의 파일
+│   ├── schema/          # MongoDB $jsonSchema validator
+│   └── protocols/       # 실험팀 제공 실제 프로토콜 (구조화된 JSON)
 ├── docs/                # 연구 문서 및 학습 노트
+│   └── archive/         # 이전 버전 문서 보존
 ├── tests/               # 유닛 테스트
 └── logs/                # 실험 로그 (gitignore)
 ```
+
+**현재 구현된 실험**: Zr-BTC MOF Synthesis Protocol (26.01.28~29, 실험팀 제공)
+- 프로토콜 원본 구조화: [`data/protocols/zr_btc_mof_protocol.json`](data/protocols/zr_btc_mof_protocol.json)
+- 스키마 설계 문서: [`docs/db_schema.md`](docs/db_schema.md)
+- 실행 예시: `python -m src.pipeline.zr_btc_synthesis_flow`
 
 ---
 
@@ -59,6 +72,10 @@ imms-sdl-os/
 | [UniLabOS (2025)](https://arxiv.org/abs/2512.21766) | AI-Native 자율실험실 OS |
 | [Tom et al., Chem. Rev. 2024](https://pubs.acs.org/doi/full/10.1021/acs.chemrev.4c00055) | SDL 종합 리뷰 |
 
+**추가 참고자료** (스키마 설계에 직접 반영, 자세한 내용은 [`docs/paper-notes.md`](docs/paper-notes.md)):
+- OCTOPUS (Yoo et al., *Nat. Commun.* 2024) — 멀티유저 SDL 스케줄링, masking table 개념
+- 지식그래프 기반 소재 합성 이론 리포트 — ActionGraph(DAG), Provenance 추적 개념
+
 ---
 
 ## 📅 연구 진행 기록
@@ -69,6 +86,6 @@ imms-sdl-os/
 
 ## 🔗 관련 기관
 
-- [IMMS 공식 사이트](https://sites.google.com/view/i-imms-2026)
+- [IMMS 공식 사이트][(https://sites.google.com/view/i-imms-2026)](https://imms.ewha.ac.kr/)
 - [나종걸 교수 연구실](https://nagroup.ewha.ac.kr/)
 - 이화여자대학교 화공신소재공학과
