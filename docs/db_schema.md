@@ -175,4 +175,4 @@ cp .env.example .env
 python -m src.database.mongo_client        # 연결 테스트 + 컬렉션/인덱스 생성
 python -m src.pipeline.zr_btc_synthesis_flow  # 실제 DB에 저장하며 프로토콜 실행
 ```
-`.env`가 없거나 연결에 실패해도 flow 자체는 시뮬레이션 모드로 계속 진행됩니다 (`save_to_db=False`로 명시적으로 끌 수도 있음).
+`.env`가 없거나 연결에 실패해도 flow 자체는 시뮬레이션 모드로 계속 진행된다 (`save_to_db=False`로 명시적으로 끌 수도 있음).
