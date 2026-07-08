@@ -5,7 +5,8 @@ MOF SDL OS — 데이터 모델 (Pydantic)
 
 설계 근거:
 - OCTOPUS (Yoo et al., 2024): Platform > Module > Task > Action 계층 구조,
-  Task별 masking table(필요 장비 목록)로 충돌 방지
+  Task별 masking table(필요한 장비 목록을 미리 정의)로 충돌 방지
+  -> 코드에서 OPERATION_REQUIRED_DEVICE_TYPE 딕셔너리로 그걸 구현함
 - ActionGraph (arXiv 2512.02947): 합성 레시피를 DAG로 표현.
   Node = 물질/조건/장치, Edge = Association(조작-대상) + Reference(이전 output → 다음 input)
 - 실험팀 프로토콜의 "Unit Operation Schema" (OP-01~OP-19)를 그대로 Enum + 타입 검증으로 이식
