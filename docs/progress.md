@@ -160,3 +160,25 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 > "SDL OS를 멋지게 만들어서 다른 기관들에게 자랑스럽게 소개할 수 있는 OS,
 > 그리고 이걸 이용해서 다양한 공정 및 소재 자율실험 원천기술의 백본으로 사용하면 좋을 것 같음
 
+--
+## Day 6 — MultiDose 공부 (2026.7.8)
+### MultiDose란
+- 다양한 SBS 포맷 바이알에 분말을 분주하는 자동화 고체 분주 시스템
+- Mettler Toledo XPR 저울과 협동로봇(cobot)을 결합해서 재현 가능한 분말 분주를 구현
+- 구체적으로는 Universal Robots의 UR3e cobot 팔에 Robotiq의 Hand-E 그리퍼를 장착한 구조
+
+### 기존 스키마와 겹치는 부분 
+- 로봇팔(UR3e) = Device.device_type: "solid_dispenser" 역할
+- Mettler Toledo XPR 저울 = 이미 mass_metal, mass_ligand 검증에 쓰던 바로 그 장비 (OP-02 VERIFY_MASS)
+> 지금 만들어놓은 OP-01 DISPENSE_SOLID + OP-02 VERIFY_MASS 오퍼레이션 그 자체
+> 즉 B-1, C-1(고체 분주) + B-2, C-2(질량 검증) Task가 실제 첫 하드웨어 연동 대상이 됨
+
+### 확인해야 하는 부분 - API 연동 가능 여부
+- 외부에서 Python으로 직접 스크립팅 가능한 오픈 API가 기본 제공인지는 불확실
+- UR 로봇 SDK나 Mettler Toledo 저울 API로 직접 저수준 제어를 만들고 있을 가능성
+> 인터페이스 계약을 정의하는게 필요
+- [ ] src/pipeline/zr_btc_synthesis_flow.py의 execute_step() 안 [SIM] 부분을 실제로 누가 어떤 함수로 대체할지 (예: dispense_solid(reagent, mass_mg, vessel) 같은 함수 시그니처를 로봇 제어팀이 구현하고, 내 코드는 그 함수를 호출만 하는 구조)
+- [ ] VERIFY_MASS 실행 후 실측값(mass_metal_mg=95.2 같은)이 어떤 형식으로 Prefect flow로 돌아올지 (JSON? 리턴값? 파일?)
+- [ ] 로봇/저울 제어 코드가 이미 Python으로 되어있는지, 아니면 별도 프로세스로 떠 있어서 소켓/API로 통신해야 하는지
+
+
