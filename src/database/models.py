@@ -262,8 +262,10 @@ class Task(BaseModel):
     step_code: str                  # 원본 프로토콜 추적용: "D-1", "F-2" 등
     operation: OperationType
     parameters: dict[str, Any]      # OPERATION_PARAM_MODEL로 검증된 값 (dict로 저장)
-    device_id: Optional[str] = None  # Manual인 경우 None
-    input_refs: list[str] = []      # 참조하는 이전 Sample.sample_id들
+    device_id: Optional[str] = None  # Manual인 경우 None. 프로토콜의 각 step들은 로봇이 아닌 사람이 직접 함! 
+                                    # 그래서 device_id에 넣을 값 없음 : 어떤 장비 ID를 넣을지는 사람이 정하는 것이기에 None으로 가능성 열어둔것
+  
+    input_refs: list[str] = []      # 참조하는 이전 Sample.sample_id들(정확히 어떤 재료를 썼는지 DB를 남기는 개념)
     output_refs: list[str] = []     # 이 Task가 생성하는 Sample.sample_id들
     repeat_of: Optional[RepeatParams] = None
     order_critical: bool = False    # TRANSFER의 order_critical과 별개로 Task 레벨에서도 노출
@@ -320,7 +322,7 @@ if __name__ == "__main__":
 
     task = Task(
         task_id="task_D1",
-        experiment_id="exp_zrbtc_001",
+        experiment_id="exp_zrbtc_001",  #이런식으로 str 값을 배당. 반드시 값이 있어야 에러가 나지 않기 때문에. 
         phase="D",
         step_code="D-1",
         operation=OperationType.TRANSFER,
