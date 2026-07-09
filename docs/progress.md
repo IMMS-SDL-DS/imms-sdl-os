@@ -181,4 +181,14 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 - [ ] VERIFY_MASS 실행 후 실측값(mass_metal_mg=95.2 같은)이 어떤 형식으로 Prefect flow로 돌아올지 (JSON? 리턴값? 파일?)
 - [ ] 로봇/저울 제어 코드가 이미 Python으로 되어있는지, 아니면 별도 프로세스로 떠 있어서 소켓/API로 통신해야 하는지
 
+---
+## Prefect 공부 (2026.7.9)
+### Prefect란
+- 파이썬 함수를 "워크플로우"로 관리해주는 오케스트레이션 도구
+-  마치 택배 추적 시스템처럼: 우리가 만든 flow/task 하나하나가 "출발 → 진행 중 → 도착/실패" 상태를 자동으로 기록하고, 실패하면 재시도(retries)도 자동으로 해줌
+> from prefect import flow
+  @flow
+  def my_workflow() -> str:
+      return "Hello, world!"
 
+  my_workflow()  # 그냥 평범한 함수처럼 호출
