@@ -187,8 +187,11 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 - 파이썬 함수를 "워크플로우"로 관리해주는 오케스트레이션 도구
 -  마치 택배 추적 시스템처럼: 우리가 만든 flow/task 하나하나가 "출발 → 진행 중 → 도착/실패" 상태를 자동으로 기록하고, 실패하면 재시도(retries)도 자동으로 해줌
 > from prefect import flow
-  @flow
-  def my_workflow() -> str:
-      return "Hello, world!"
+> @flow
+> def my_workflow() -> str:   return "Hello, world!"
+> my_workflow()  # 그냥 평범한 함수처럼 호출
 
-  my_workflow()  # 그냥 평범한 함수처럼 호출
+- execute_step이 실행되다가 예외(에러)가 발생하면, Prefect가 자동으로 한 번 더 이 함수를 처음부터 다시 실행
+- 그리고 그 재시도까지 실패하면 그때 최종 Failed 상태
+- (예시) MultiDose 로봇한테 명령을 보냈는데, 마침 로봇이 이전 동작 중이라 순간적으로 통신이 씹혀서 타임아웃 에러!
+- **retries=1**  Prefect가 "어 실패했네, 한 번 더 해보자" 하고 자동으로 재시도해서 넘어가게 됨
