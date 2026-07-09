@@ -50,7 +50,7 @@ class OperationType(str, Enum):
     SOLVENT_CHANGE = "SOLVENT_CHANGE"       # OP-17
     GRIND = "GRIND"                         # OP-18
     ANALYZE_OM = "ANALYZE_OM"               # OP-19
-
+# Enum을 쓴다는 것: 존재하지 않는 값을 넣는 순간 바로 에러가 나니까 오류값을 바로 잡아낼 수 있음
 
 # 각 Operation이 실제로 어떤 장비를 필요로 하는지 (OCTOPUS의 masking table 개념).
 # Task 실행 전 Resource Manager가 이 목록으로 Device 충돌 여부를 체크한다.
@@ -151,6 +151,9 @@ class HeatParams(BaseModel):
     temp_c: float
     duration_h: float
     mode: Literal["static", "stir"] = "static"
+
+##Heat라는 명령: 반드시 vessel, temp_c, duratiion_h를 가져야 하고, mode는 staitc or stir 하나만 가능 -> 클래스 선언
+## 즉. 러벗한테 가기 전에 미리 걸러주는 문지기 역할 (pydantic)
 
 
 class DryParams(BaseModel):
