@@ -1,8 +1,8 @@
 # 🗄️ MOF 실험 DB 스키마 설계 (v2)
 
 > v1(초기 일반 초안)은 AlabOS/ChemOS 2.0 구조만 참고한 추측 기반 설계였음.
-> v2는 실험팀이 공유해준 **실제 프로토콜**(`MOF_실험_공정팀_final.pdf`, Zr-BTC MOF Synthesis, 26.01.28~29)을
-> 그대로 반영해서 다시 짠 버전. v1 문서는 [`docs/archive/db_schema_v1.md`](archive/db_schema_v1.md)에 보존.
+> v2는 연서님(기존 MOF팀에서 진행한)께 제공받은 **실제 프로토콜**(`MOF_실험_공정팀_final.pdf`, Zr-BTC MOF Synthesis, 26.01.28~29)을
+> 그대로 반영해서 다시 짠 버전. v1 문서는 [`docs/archive/db_schema_v1.md`](archive/db_schema_v1.md)에 보존해두었음.
 
 ---
 
@@ -175,4 +175,4 @@ cp .env.example .env
 python -m src.database.mongo_client        # 연결 테스트 + 컬렉션/인덱스 생성
 python -m src.pipeline.zr_btc_synthesis_flow  # 실제 DB에 저장하며 프로토콜 실행
 ```
-`.env`가 없거나 연결에 실패해도 flow 자체는 시뮬레이션 모드로 계속 진행됩니다 (`save_to_db=False`로 명시적으로 끌 수도 있음).
+`.env`가 없거나 연결에 실패해도 flow 자체는 시뮬레이션 모드로 계속 진행된다 (`save_to_db=False`로 명시적으로 끌 수도 있음).
