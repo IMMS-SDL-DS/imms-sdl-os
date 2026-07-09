@@ -1,7 +1,7 @@
 """
 MOF SDL OS — 일반화된 고체 분주 명령 인터페이스
 =================================================
-교수님 요청(2026.7): MultiDose 시스템을 OS의 첫 실증(proof of concept)으로 사용.
+내가 할 일 업데이트: MultiDose 시스템을 OS의 첫 실증(proof of concept)으로 사용.
 "어떤 소재를 몇 그램 담아라"는 일반화된 명령 하나를 받으면, 실제 MultiDose
 (Universal Robots 로봇팔 + Mettler Toledo XPR 저울)가 그대로 수행하도록 만드는 것이 목표.
 
@@ -18,10 +18,10 @@ MOF SDL OS — 일반화된 고체 분주 명령 인터페이스
 "자리"만 정의해두고, 김연서/안윤수가 만드는 실제 제어 함수를 그 자리에
 꽂아 넣기만 하면 되도록 설계했다 (지금은 simulated_robot_driver로 대체).
 
-로봇 드라이버 인터페이스 계약 (김연서/안윤수와 맞춰야 할 부분):
+로봇 드라이버 인터페이스 계약 (다른 연구원분들과 맞춰야 할 부분):
     입력: reagent(str), target_mass_mg(float), tolerance_mg(float), vessel(str)
     출력: {"actual_mass_mg": float, "success": bool}
-    이 계약이 다르면 김연서/안윤수 실제 구현 시 이 시그니처에 맞춰서 어댑터만
+    이 계약이 다르면 실제 구현 시 이 시그니처에 맞춰서 어댑터만
     하나 추가하면 됨 (run_dispense_command 자체는 안 바뀜).
 """
 
@@ -41,7 +41,7 @@ RobotDriver = Callable[[str, float, float, str], dict]
 def simulated_robot_driver(reagent: str, target_mass_mg: float, tolerance_mg: float, vessel: str) -> dict:
     """
     실제 MultiDose 연동 전 임시 시뮬레이션.
-    TODO: 김연서/안윤수의 실제 로봇 제어 함수로 교체 (동일 시그니처 유지).
+    TODO: 실제 로봇 제어 함수로 교체 (동일 시그니처 유지).
     """
     actual = target_mass_mg + random.uniform(-tolerance_mg * 0.6, tolerance_mg * 0.6)
     print(f"    [SIM-MultiDose] {reagent} {actual:.2f}mg → {vessel}")
