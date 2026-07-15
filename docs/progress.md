@@ -243,7 +243,7 @@ EOF
 
 ---
 
-## Day 7 — 재시도(Retry) 안전 정책 구현 (2026.7.15)
+## 재시도(Retry) 안전 정책 구현 (2026.7.15)
 
 ### 계기
 - Prefect 학습 중 "DISPENSE_SOLID처럼 물리적 부작용이 있는 오퍼레이션을 재시도하면
@@ -275,3 +275,36 @@ EOF
 ### 다음에 할 것
 - [ ] Device 상태(idle/busy) 실시간 갱신 로직 구현
 - [ ]  MultiDose 인터페이스 계약 확인
+
+---
+
+## Day 9 — 명령 인터페이스 확장: VERIFY_MASS, HEAT (2026.7.15)
+
+### 계기
+- `run_dispense_command()`(OP-01)만 일반화돼 있던 걸, 다른 오퍼레이션까지 넓혀서
+  "OS의 백본" 역할을 더 제대로 하게 만들기.
+
+### 한 일
+- [x] `src/pipeline/generalized_commands.py` 신설:
+      - `run_verify_mass_command(vessel, expected_mass_mg)` — OP-02. MultiDose 저울
+        (`dev_multidose`)을 dispense_command.py와 공유. 측정 자체가 목적이라
+        합격/불합격 판정 없이 항상 성공으로 기록.
+      - `run_heat_command(vessel, temp_c, duration_h, mode, output_sample_code=...)` — OP-12.
+        Oven/Heating Block(`dev_heater`)이라는 MultiDose와 별개 장비를 써서,
+        MultiDose가 busy여도 동시에 실행 가능하게 설계.
+      - 두 명령 모두 `run_dispense_command`와 같은 뼈대(검증→장비락→드라이버→DB기록→release)
+- [x] `tests/test_generalized_commands.py` — 4개 테스트(측정값 기록, 락 충돌, 샘플 생성,
+      MultiDose와 독립적으로 동작하는지) 전부 통과
+- [x] 전체 테스트 22개로 확장, 전부 통과 확인
+- [x] `docs/db_schema.md`에 확장 내용 문서화
+
+### 배운 것
+- 같은 "뼈대 패턴"(검증→락→실행→기록)을 재사용하면, 새 오퍼레이션을 추가할 때마다
+  거의 복사-붙여넣기 수준으로 빠르게 확장 가능함 — 이게 "일반화된 OS 백본"의 진짜 의미
+- Device를 오퍼레이션마다 무조건 하나로 묶지 않고, 물리적으로 실제 같은 장비인지
+  (저울 = MultiDose 공유) 아닌지(히터 = 별개 장비)를 구분해서 device_id를 다르게
+  줘야 불필요한 대기(false blocking)를 막을 수 있음
+
+### 다음에 할 것
+- [ ] `zr_btc_synthesis_flow.py`의 `execute_step`에도 Device 락 패턴 적용
+
