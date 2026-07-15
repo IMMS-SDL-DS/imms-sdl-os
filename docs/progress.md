@@ -240,3 +240,38 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 - [ ] Device 상태(idle/busy) 실시간 갱신 로직 구현
 - [ ] DISPENSE_SOLID처럼 물리적 부작용이 있는 오퍼레이션의 안전한 재시도(retry) 정책 재검토
 EOF
+
+---
+
+## Day 7 — 재시도(Retry) 안전 정책 구현 (2026.7.15)
+
+### 계기
+- Prefect 학습 중 "DISPENSE_SOLID처럼 물리적 부작용이 있는 오퍼레이션을 재시도하면
+  위험할 수 있다"는 걸 스스로 깨닫고, 실제 코드에 반영하기로 함.
+- 지금 당장 하드웨어 연결로 인한 사고 위험은 없지만(전부 시뮬레이션 상태),
+  나중에 실제 로봇 코드가 연결됐을 때 터지기 전에 미리 고쳐두는 게 목적.
+
+### 한 일
+- [x] `src/database/models.py` — `SAFE_TO_RETRY_OPERATIONS` 집합 + `is_safely_retryable()` 추가.
+      측정/판독만 하는 오퍼레이션(VERIFY_MASS, ANALYZE_XRD, ANALYZE_OM, BALANCE_CHECK)만
+      재시도 허용, 나머지(DISPENSE_SOLID, TRANSFER, HEAT 등)는 재시도 금지로 분류.
+- [x] `src/pipeline/zr_btc_synthesis_flow.py` — `execute_step` 기본 `retries=0`으로 변경,
+      `_call_execute_step()` 헬퍼가 안전한 오퍼레이션에만 `.with_options(retries=1)` 적용.
+- [x] `tests/test_models.py` — 위험군/안전군 분류 검증 테스트 2개 추가 (전체 12개 테스트 통과)
+- [x] `docs/db_schema.md` — "재시도 안전 정책" 섹션 문서화
+
+### 겪은 문제 (트러블슈팅)
+- 압축 파일 안에 폴더가 한 겹 더 들어있어서 `cp` 명령이 계속 "No such file" 에러 →
+  `find`로 실제 경로 확인 후 해결
+- `cd`가 실패했는데 그 상태로 실행한 `git status`가 정상 동작해서 혼란 →
+  알고 보니 저장소 자체가 예상 위치(`Downloads/imms-sdl-os`)가 아니라
+  `/c/Users/user/imms-sdl-os`에 있었음. `pwd`로 확인해서 해결
+- **교훈: 매번 새 Git Bash 창을 열 때는 `pwd`부터 쳐서 지금 어디 있는지 확인하는 습관을
+  들이자.** 창마다 시작 위치가 다를 수 있고, 저장소가 예상과 다른 곳에 있을 수도 있어서
+  이 습관 하나로 오늘 같은 헷갈림을 미리 방지할 수 있음.
+- `git commit`이 nano 에디터를 띄웠는데 키 입력이 안 먹힌 상황 발생 →
+  `git commit --no-edit`로 에디터 없이 기본 메시지 그대로 커밋하는 방법으로 해결
+
+### 다음에 할 것
+- [ ] Device 상태(idle/busy) 실시간 갱신 로직 구현
+- [ ]  MultiDose 인터페이스 계약 확인
