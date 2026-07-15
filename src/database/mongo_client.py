@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -138,6 +139,66 @@ def get_sample_lineage(db: Database, sample_id: str) -> Optional[dict]:
         db["task"].find({"task_id": {"$in": sample.get("consumed_by_task_ids", [])}})
     )
     return {"sample": sample, "produced_by": produced_by, "consumed_by": consumed_by}
+
+
+# ── Device 상태 관리 (OCTOPUS 논문의 masking table 개념) ─────────────
+# 여러 실험/Task가 같은 장비(예: Opentron Flex, MultiDose)를 공유할 때,
+# 동시에 두 Task가 같은 장비를 쓰려고 하면 물리적 충돌이 생길 수 있다.
+# MongoDB의 find_one_and_update는 "조건 확인 + 값 변경"을 하나의 원자적(atomic)
+# 연산으로 처리해주기 때문에, 두 프로세스가 동시에 같은 장비를 요청해도
+# 반드시 하나만 성공하도록 보장된다 (경쟁 상태race condition 방지).
+
+def register_device_if_missing(
+    db: Database,
+    device_id: str,
+    name: str,
+    device_type: str,
+    connection: str = "python_api",
+    shared_phases: Optional[list[str]] = None,
+) -> None:
+    """
+    장비가 device 컬렉션에 없으면 idle 상태로 새로 등록한다.
+    이미 있으면 아무것도 안 바꾼다 ($setOnInsert) — 다른 Task가 이미
+    busy로 표시해둔 장비의 상태를 실수로 되돌리지 않기 위함.
+    """
+    db["device"].update_one(
+        {"device_id": device_id},
+        {
+            "$setOnInsert": {
+                "device_id": device_id,
+                "name": name,
+                "device_type": device_type,
+                "connection": connection,
+                "shared_phases": shared_phases or [],
+                "status": "idle",
+                "last_used_at": None,
+            }
+        },
+        upsert=True,
+    )
+
+
+def try_acquire_device(db: Database, device_id: str) -> bool:
+    """
+    장비를 "busy"로 표시하려고 시도한다.
+    지금 상태가 정확히 "idle"일 때만 "busy"로 바뀌고 True를 반환한다.
+    이미 busy(다른 Task가 쓰는 중)라면 아무것도 안 바뀌고 False를 반환한다.
+    이 확인+변경이 하나의 원자적 연산이라, 두 Task가 동시에 호출해도
+    반드시 하나만 True를 받는다.
+    """
+    result = db["device"].find_one_and_update(
+        {"device_id": device_id, "status": "idle"},
+        {"$set": {"status": "busy", "last_used_at": datetime.now()}},
+    )
+    return result is not None
+
+
+def release_device(db: Database, device_id: str) -> None:
+    """장비를 다시 idle 상태로 되돌린다 (Task 성공/실패와 무관하게 항상 호출해야 함)."""
+    db["device"].update_one(
+        {"device_id": device_id},
+        {"$set": {"status": "idle", "last_used_at": datetime.now()}},
+    )
 
 
 if __name__ == "__main__":
