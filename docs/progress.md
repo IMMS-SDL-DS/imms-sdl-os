@@ -218,6 +218,13 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
       - Dashboard 전체 화면에서 8회 실행, 57개 Task 100% 완료, 0 failed 확인
       - 이 화면들을 캡처로 공유 (`docs/prefect_dashboard_guide.md` 참고)
 
+### 실제 화면 (flow 구동)
+
+![Flows 목록 화면](images/prefect_flows_list.png)
+
+![첫 테스트 실행 로그](images/prefect_first_test_run.png)
+
+![Zr-BTC 전체 실행 로그](images/prefect_zrbtc_execution_log.png)
 
 ### 배운 것
 - MultiDose는 UR3e 협동로봇 + Mettler Toledo XPR 저울 조합으로, 우리 스키마의
