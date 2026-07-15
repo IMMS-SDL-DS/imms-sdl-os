@@ -1,8 +1,8 @@
 # 🗄️ MOF 실험 DB 스키마 설계 (v2)
 
 > v1(초기 일반 초안)은 AlabOS/ChemOS 2.0 구조만 참고한 추측 기반 설계였음.
-> v2는 연서님(기존 MOF팀에서 진행한)께 제공받은 **실제 프로토콜**(`MOF_실험_공정팀_final.pdf`, Zr-BTC MOF Synthesis, 26.01.28~29)을
-> 그대로 반영해서 다시 짠 버전. v1 문서는 [`docs/archive/db_schema_v1.md`](archive/db_schema_v1.md)에 보존해두었음.
+> v2는 실험팀이 공유해준 **실제 프로토콜**(`MOF_실험_공정팀_final.pdf`, Zr-BTC MOF Synthesis, 26.01.28~29)을
+> 그대로 반영해서 다시 짠 버전. v1 문서는 [`docs/archive/db_schema_v1.md`](archive/db_schema_v1.md)에 보존.
 
 ---
 
@@ -158,11 +158,30 @@ Experiment
 
 ---
 
+## 재시도(Retry) 안전 정책
+
+Prefect의 `retries`는 통신 에러 등으로 Task가 실패했을 때 자동으로 다시 실행해주지만,
+**물리적 부작용이 있는 오퍼레이션**을 무조건 재시도하면 위험하다. 예를 들어
+`DISPENSE_SOLID`가 "실패"로 기록됐다가 재시도됐는데, 사실은 통신 에러가 아니라
+이미 절반쯤 분주된 상태였다면 목표량의 2배가 들어갈 수 있다.
+
+그래서 `src/database/models.py`의 `SAFE_TO_RETRY_OPERATIONS`로 오퍼레이션을 분류한다:
+
+| 분류 | Operation | 이유 |
+|---|---|---|
+| ✅ 안전 (재시도 허용) | VERIFY_MASS, ANALYZE_XRD, ANALYZE_OM, BALANCE_CHECK | 측정/판독만 하고 물질 상태를 바꾸지 않음 |
+| ⚠️ 위험 (재시도 금지) | DISPENSE_SOLID, TRANSFER, HEAT, CENTRIFUGE 등 나머지 전부 | 이미 일부 실행됐을 가능성이 있어 재시도 시 물리적 사고 위험 |
+
+`src/pipeline/zr_btc_synthesis_flow.py`의 `execute_step` task는 기본값 `retries=0`이고,
+`_call_execute_step()` 헬퍼가 `is_safely_retryable(operation)`을 체크해서 안전한
+오퍼레이션에만 `.with_options(retries=1)`로 재시도를 허용한다.
+
 ## TODO
 - [x] Unit Operation Schema를 Pydantic 모델로 구현 (`src/database/models.py`)
 - [x] 실제 프로토콜을 JSON 데이터로 구조화 (`data/protocols/zr_btc_mof_protocol.json`)
 - [x] Prefect flow로 전체 프로토콜 실행 테스트 (`src/pipeline/zr_btc_synthesis_flow.py`, 시뮬레이션 모드)
 - [x] MongoDB Atlas 연결 (`src/database/mongo_client.py`) — `.env` 설정 후 실제 저장 확인
+- [x] DISPENSE_SOLID 등 물리적 오퍼레이션의 안전한 재시도 정책 구현 (`SAFE_TO_RETRY_OPERATIONS`)
 - [ ] 실제 장비 Python API 연결 (`execute_step()` 안의 `[SIM]` 부분 교체)
 - [ ] Device 상태(idle/busy) 실시간 갱신 → 여러 실험 병렬 실행 시 충돌 방지 로직
 - [ ] XRD 파일 자동 파싱 후 `sample.properties`에 저장
@@ -175,4 +194,4 @@ cp .env.example .env
 python -m src.database.mongo_client        # 연결 테스트 + 컬렉션/인덱스 생성
 python -m src.pipeline.zr_btc_synthesis_flow  # 실제 DB에 저장하며 프로토콜 실행
 ```
-`.env`가 없거나 연결에 실패해도 flow 자체는 시뮬레이션 모드로 계속 진행된다 (`save_to_db=False`로 명시적으로 끌 수도 있음).
+`.env`가 없거나 연결에 실패해도 flow 자체는 시뮬레이션 모드로 계속 진행됩니다 (`save_to_db=False`로 명시적으로 끌 수도 있음).

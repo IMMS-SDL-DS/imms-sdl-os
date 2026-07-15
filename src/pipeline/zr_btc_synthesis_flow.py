@@ -27,6 +27,7 @@ from prefect import flow, get_run_logger, task
 from src.database.models import (
     OperationType,
     Task,
+    is_safely_retryable,
     validate_operation_params,
 )
 from src.database.mongo_client import get_database, save_task
@@ -40,7 +41,10 @@ def load_protocol(path: Path = PROTOCOL_PATH) -> dict:
 
 
 # ── 개별 Step 실행 (Unit Operation 1개 = Prefect task 1개) ──────────────
-@task(name="execute_unit_operation", retries=1)
+# 기본 retries=0: 물리적 부작용이 있는 오퍼레이션은 재시도하면 위험할 수 있어
+# "재시도 안 함"을 안전한 기본값으로 둔다. 측정/판독처럼 안전한 오퍼레이션만
+# _call_execute_step()에서 명시적으로 retries=1을 적용한다.
+@task(name="execute_unit_operation", retries=0)
 def execute_step(
     experiment_id: str,
     phase: str,
@@ -88,6 +92,19 @@ def execute_step(
 
 
 # ── Phase 단위 sub-flow ──────────────────────────────────────────────
+def _call_execute_step(experiment_id: str, phase: str, step: dict, db=None) -> Task:
+    """
+    operation 종류에 따라 안전한 재시도 정책을 적용해 execute_step을 호출한다.
+    측정/판독(VERIFY_MASS, ANALYZE_XRD 등)만 retries=1로 재시도를 허용하고,
+    나머지(DISPENSE_SOLID, TRANSFER, HEAT 등 물리적 부작용이 있는 오퍼레이션)는
+    execute_step 데코레이터의 기본값(retries=0)을 그대로 사용해 재시도하지 않는다.
+    """
+    operation = OperationType(step["operation"])
+    if is_safely_retryable(operation):
+        return execute_step.with_options(retries=1)(experiment_id, phase, step, db=db)
+    return execute_step(experiment_id, phase, step, db=db)
+
+
 @flow(name="run_phase")
 def run_phase(experiment_id: str, phase_data: dict, db=None) -> list[Task]:
     logger = get_run_logger()
@@ -114,7 +131,7 @@ def run_phase(experiment_id: str, phase_data: dict, db=None) -> list[Task]:
                 for target in repeat_targets:
                     if target["operation"] == "REPEAT":
                         continue
-                    result = execute_step(
+                    result = _call_execute_step(
                         experiment_id, phase,
                         {**target, "step_code": f"{target['step_code']}_rep{i+1}"},
                         db=db,
@@ -122,7 +139,7 @@ def run_phase(experiment_id: str, phase_data: dict, db=None) -> list[Task]:
                     executed.append(result)
             continue
 
-        result = execute_step(experiment_id, phase, step, db=db)
+        result = _call_execute_step(experiment_id, phase, step, db=db)
         executed.append(result)
 
         # order_critical Task 실패 시 전체 flow 중단

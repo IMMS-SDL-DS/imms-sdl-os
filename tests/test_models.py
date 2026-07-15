@@ -65,3 +65,32 @@ def test_repeat_operation_params():
         {"start_step": "F-2", "end_step": "F-6", "count": 3, "solvent": "DMF"},
     )
     assert params.count == 3
+
+
+def test_physical_operations_are_not_safely_retryable():
+    """DISPENSE_SOLID 등 물리적 부작용이 있는 오퍼레이션은 자동 재시도하면 안 됨."""
+    from src.database.models import is_safely_retryable
+
+    dangerous_ops = [
+        OperationType.DISPENSE_SOLID,
+        OperationType.TRANSFER,
+        OperationType.HEAT,
+        OperationType.CENTRIFUGE,
+        OperationType.DISPENSE,
+    ]
+    for op in dangerous_ops:
+        assert not is_safely_retryable(op), f"{op}는 재시도 위험한데 안전하다고 분류됨"
+
+
+def test_measurement_operations_are_safely_retryable():
+    """VERIFY_MASS 등 측정/판독만 하는 오퍼레이션은 재시도해도 안전함."""
+    from src.database.models import is_safely_retryable
+
+    safe_ops = [
+        OperationType.VERIFY_MASS,
+        OperationType.ANALYZE_XRD,
+        OperationType.ANALYZE_OM,
+        OperationType.BALANCE_CHECK,
+    ]
+    for op in safe_ops:
+        assert is_safely_retryable(op), f"{op}는 안전한데 재시도 불가로 분류됨"

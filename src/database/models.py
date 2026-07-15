@@ -5,8 +5,7 @@ MOF SDL OS — 데이터 모델 (Pydantic)
 
 설계 근거:
 - OCTOPUS (Yoo et al., 2024): Platform > Module > Task > Action 계층 구조,
-  Task별 masking table(필요한 장비 목록을 미리 정의)로 충돌 방지
-  -> 코드에서 OPERATION_REQUIRED_DEVICE_TYPE 딕셔너리로 그걸 구현함
+  Task별 masking table(필요 장비 목록)로 충돌 방지
 - ActionGraph (arXiv 2512.02947): 합성 레시피를 DAG로 표현.
   Node = 물질/조건/장치, Edge = Association(조작-대상) + Reference(이전 output → 다음 input)
 - 실험팀 프로토콜의 "Unit Operation Schema" (OP-01~OP-19)를 그대로 Enum + 타입 검증으로 이식
@@ -50,7 +49,7 @@ class OperationType(str, Enum):
     SOLVENT_CHANGE = "SOLVENT_CHANGE"       # OP-17
     GRIND = "GRIND"                         # OP-18
     ANALYZE_OM = "ANALYZE_OM"               # OP-19
-# Enum을 쓴다는 것: 존재하지 않는 값을 넣는 순간 바로 에러가 나니까 오류값을 바로 잡아낼 수 있음
+
 
 # 각 Operation이 실제로 어떤 장비를 필요로 하는지 (OCTOPUS의 masking table 개념).
 # Task 실행 전 Resource Manager가 이 목록으로 Device 충돌 여부를 체크한다.
@@ -75,6 +74,26 @@ OPERATION_REQUIRED_DEVICE_TYPE: dict[OperationType, str] = {
     OperationType.GRIND: "manual",
     OperationType.ANALYZE_OM: "optical_microscope",
 }
+
+
+# 자동 재시도(retry)가 안전한 Operation만 표시.
+# ── 안전(재시도해도 부작용 없음): 측정/판독만 하고 물질 상태를 바꾸지 않는 것들.
+#    예: VERIFY_MASS는 저울 값을 다시 읽기만 함, ANALYZE_XRD/ANALYZE_OM도 측정만 함.
+# ── 위험(재시도하면 안 됨): 물리적으로 물질을 옮기거나 바꾸는 것들.
+#    예: DISPENSE_SOLID를 재시도하면, 실패 원인이 "통신 에러"가 아니라
+#    "이미 절반쯤 분주된 상태"였을 경우 목표량의 2배가 들어갈 수 있음.
+#    TRANSFER, HEAT, CENTRIFUGE 등도 마찬가지로 "이미 일부 실행됐을 가능성"이 있어 위험.
+SAFE_TO_RETRY_OPERATIONS: frozenset[OperationType] = frozenset({
+    OperationType.VERIFY_MASS,
+    OperationType.ANALYZE_XRD,
+    OperationType.ANALYZE_OM,
+    OperationType.BALANCE_CHECK,
+})
+
+
+def is_safely_retryable(operation: OperationType) -> bool:
+    """이 Operation이 통신 에러 등으로 실패했을 때 자동 재시도해도 안전한지."""
+    return operation in SAFE_TO_RETRY_OPERATIONS
 
 
 # ─────────────────────────────────────────────────────────────
@@ -151,9 +170,6 @@ class HeatParams(BaseModel):
     temp_c: float
     duration_h: float
     mode: Literal["static", "stir"] = "static"
-
-##Heat라는 명령: 반드시 vessel, temp_c, duratiion_h를 가져야 하고, mode는 staitc or stir 하나만 가능 -> 클래스 선언
-## 즉. 러벗한테 가기 전에 미리 걸러주는 문지기 역할 (pydantic)
 
 
 class DryParams(BaseModel):
@@ -262,10 +278,8 @@ class Task(BaseModel):
     step_code: str                  # 원본 프로토콜 추적용: "D-1", "F-2" 등
     operation: OperationType
     parameters: dict[str, Any]      # OPERATION_PARAM_MODEL로 검증된 값 (dict로 저장)
-    device_id: Optional[str] = None  # Manual인 경우 None. 프로토콜의 각 step들은 로봇이 아닌 사람이 직접 함! 
-                                    # 그래서 device_id에 넣을 값 없음 : 어떤 장비 ID를 넣을지는 사람이 정하는 것이기에 None으로 가능성 열어둔것
-  
-    input_refs: list[str] = []      # 참조하는 이전 Sample.sample_id들(정확히 어떤 재료를 썼는지 DB를 남기는 개념)
+    device_id: Optional[str] = None  # Manual인 경우 None
+    input_refs: list[str] = []      # 참조하는 이전 Sample.sample_id들
     output_refs: list[str] = []     # 이 Task가 생성하는 Sample.sample_id들
     repeat_of: Optional[RepeatParams] = None
     order_critical: bool = False    # TRANSFER의 order_critical과 별개로 Task 레벨에서도 노출
@@ -322,7 +336,7 @@ if __name__ == "__main__":
 
     task = Task(
         task_id="task_D1",
-        experiment_id="exp_zrbtc_001",  #이런식으로 str 값을 배당. 반드시 값이 있어야 에러가 나지 않기 때문에. 
+        experiment_id="exp_zrbtc_001",
         phase="D",
         step_code="D-1",
         operation=OperationType.TRANSFER,
