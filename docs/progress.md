@@ -226,6 +226,10 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 
 ![Zr-BTC 전체 실행 로그](images/prefect_zrbtc_execution_log.png)
 
+**Zr-BTC-MOF-Synthesis 전체 실행 그래프 (Phase A~G 전부 펼침)**
+![Prefect 전체 flow 그래프 1](prefect_full_flow_1.png)
+![Prefect 전체 flow 그래프 2 - Washing 반복 구간](prefect_full_flow_2.png)
+
 ### 배운 것
 - MultiDose는 UR3e 협동로봇 + Mettler Toledo XPR 저울 조합으로, 우리 스키마의
   `OP-01 DISPENSE_SOLID` + `OP-02 VERIFY_MASS`와 정확히 대응됨. GPU는 필요 없는 시스템
