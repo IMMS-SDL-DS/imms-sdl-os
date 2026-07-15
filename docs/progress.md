@@ -195,3 +195,36 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 - 그리고 그 재시도까지 실패하면 그때 최종 Failed 상태
 - (예시) MultiDose 로봇한테 명령을 보냈는데, 마침 로봇이 이전 동작 중이라 순간적으로 통신이 씹혀서 타임아웃 에러!
 - **retries=1**  Prefect가 "어 실패했네, 한 번 더 해보자" 하고 자동으로 재시도해서 넘어가게 됨
+
+---
+
+## MultiDose 실증 준비 + Prefect 대시보드 첫 확인 (2026.7.15)
+
+### 계기
+- 교수님 공지: MultiDose를 OS의 첫 실증(proof of concept)으로 사용하기로 결정.
+  로봇/저울 제어(김연서·안윤수), 도징헤드 판 구축(정윤서), OS 개발(손시영) 역할 분담 확정.
+- 선배가 Prefect 파이프라인 실제 작동 화면(그래프/타임라인) 캡처를 요청.
+
+### 한 일
+- [x] `src/pipeline/dispense_command.py` — 특정 프로토콜에 종속되지 않는 범용 고체 분주 명령
+      (`run_dispense_command(reagent, target_mass_mg, vessel)`) 구현.
+      로봇 제어는 `RobotDriver` 인터페이스로 분리해둬서, 실제 제어 함수를
+      나중에 그대로 꽂아 넣을 수 있게 설계함 (지금은 `simulated_robot_driver`로 대체).
+- [x] `docs/multidose_integration.md` — 로봇 제어팀과 맞춰야 할 인터페이스 계약 + 확인 질문 정리
+- [x] `tests/test_dispense_command.py` — 성공/실패/여러 소재 일반화 테스트 3개 통과
+- [x] 로컬 Prefect 서버(`prefect server start`)를 처음으로 직접 띄워서 대시보드 확인
+      - `Zr-BTC-MOF-Synthesis` flow가 `run_phase`(Phase별) → `execute_unit_operation`(Task별)
+        계층 구조로 시각화되는 것을 실제로 확인
+      - Dashboard 전체 화면에서 8회 실행, 57개 Task 100% 완료, 0 failed 확인
+      - 이 화면들을 김연서님께 캡처로 공유 (`docs/prefect_dashboard_guide.md` 참고)
+
+### 배운 것
+- MultiDose는 UR3e 협동로봇 + Mettler Toledo XPR 저울 조합으로, 우리 스키마의
+  `OP-01 DISPENSE_SOLID` + `OP-02 VERIFY_MASS`와 정확히 대응됨. GPU는 필요 없는 시스템
+  (딥러닝/비전 처리가 없고, 로봇 경로 계산·저울 피드백 제어는 일반 CPU로 충분)
+
+### 다음에 할 것
+- [ ]  `docs/multidose_integration.md`의 인터페이스 계약 질문 확인
+- [ ] Device 상태(idle/busy) 실시간 갱신 로직 구현
+- [ ] DISPENSE_SOLID처럼 물리적 부작용이 있는 오퍼레이션의 안전한 재시도(retry) 정책 재검토
+EOF
