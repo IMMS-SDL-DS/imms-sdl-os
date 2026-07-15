@@ -203,7 +203,7 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
 ### 계기
 - 교수님 공지: MultiDose를 OS의 첫 실증(proof of concept)으로 사용하기로 결정.
   로봇/저울 제어(김연서·안윤수), 도징헤드 판 구축(정윤서), OS 개발(손시영) 역할 분담 확정.
-- 선배가 Prefect 파이프라인 실제 작동 화면(그래프/타임라인) 캡처를 요청.
+-  Prefect 파이프라인 실제 작동 화면(그래프/타임라인) 확인 필요
 
 ### 한 일
 - [x] `src/pipeline/dispense_command.py` — 특정 프로토콜에 종속되지 않는 범용 고체 분주 명령
@@ -216,7 +216,8 @@ Prefect + MongoDB로 MOF 실험에 구현하는 것"
       - `Zr-BTC-MOF-Synthesis` flow가 `run_phase`(Phase별) → `execute_unit_operation`(Task별)
         계층 구조로 시각화되는 것을 실제로 확인
       - Dashboard 전체 화면에서 8회 실행, 57개 Task 100% 완료, 0 failed 확인
-      - 이 화면들을 김연서님께 캡처로 공유 (`docs/prefect_dashboard_guide.md` 참고)
+      - 이 화면들을 캡처로 공유 (`docs/prefect_dashboard_guide.md` 참고)
+
 
 ### 배운 것
 - MultiDose는 UR3e 협동로봇 + Mettler Toledo XPR 저울 조합으로, 우리 스키마의
