@@ -1,7 +1,7 @@
 # 🔗 Scheduler Interface — Job Schema Contract
 
-> Mehdi 박사의 Learning-Aware Scheduler와 MOF SDL OS(공유 DB) 사이의 인터페이스 정의.
-> 교수님 슬라이드(2026.7.15) 4번 "Architecture"에 명시된 계약:
+> Learning-Aware Scheduler(Dr.Mehdi)와 MOF SDL OS(공유 DB) 사이의 인터페이스 정의.
+> 슬라이드(2026.7.15) 4번 "Architecture"에 명시된 계약:
 > "reads {value, duration, device, precedence, deadline} · returns ordering"
 
 ---
