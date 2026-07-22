@@ -201,6 +201,51 @@ def release_device(db: Database, device_id: str) -> None:
     )
 
 
+# ── Scheduler 인터페이스 (Mehdi의 Learning-Aware Scheduler와의 read/write 계약) ──
+# 스케줄러는 이 DB를 통해 job schema {value, duration, device, precedence, deadline}를
+# 읽고, 계산한 실행 순서(ordering)를 다시 써넣는다.
+# 자세한 계약 내용은 docs/scheduler_interface.md 참고.
+
+def get_scheduler_job_queue(db: Database, experiment_id: Optional[str] = None) -> list[dict]:
+    """
+    스케줄링 대상 Task들을 job schema 형태로 반환한다.
+    status="pending"인 Task만 대상 (아직 실행 안 됐고, 순서를 기다리는 것들).
+    experiment_id를 주면 그 실험(캠페인)으로 범위를 좁힌다.
+    """
+    query = {"status": "pending"}
+    if experiment_id:
+        query["experiment_id"] = experiment_id
+
+    jobs = []
+    for doc in db["task"].find(query):
+        jobs.append({
+            "job_id": doc["task_id"],
+            "value": doc.get("scheduler_value"),
+            "duration": doc.get("scheduler_duration_estimate_sec"),
+            "device": doc.get("device_id"),
+            "precedence": doc.get("scheduler_precedence", []),
+            "deadline": doc.get("scheduler_deadline"),
+        })
+    return jobs
+
+
+def apply_scheduler_ordering(db: Database, ordering: list[str]) -> int:
+    """
+    스케줄러가 계산한 실행 순서를 DB에 반영한다.
+    ordering은 task_id 리스트이며, 리스트 순서대로 0, 1, 2, ...가
+    각 Task의 scheduler_priority로 저장된다 (낮을수록 먼저 실행).
+    반영된 Task 개수를 반환한다.
+    """
+    updated = 0
+    for priority, task_id in enumerate(ordering):
+        result = db["task"].update_one(
+            {"task_id": task_id},
+            {"$set": {"scheduler_priority": priority}},
+        )
+        updated += result.modified_count
+    return updated
+
+
 if __name__ == "__main__":
     # 연결 테스트: python -m src.database.mongo_client
     database = get_database()

@@ -271,6 +271,12 @@ class Task(BaseModel):
     프로토콜의 개별 Step 1개 (예: "D-1")에 대응.
     ActionGraph의 Association Edge(operation ↔ 대상) + Reference Edge(input/output 참조)를
     input_refs / output_refs 필드로 표현한다.
+
+    scheduler_* 필드들은 Mehdi의 Learning-Aware Scheduler와의 인터페이스다.
+    Task 실행 자체와는 무관하고, "이 Task를 언제/어떤 순서로 실행할지" 결정하는 데만 쓰인다.
+    job schema 계약: {value, duration, device, precedence, deadline}
+    (device는 이미 있는 device_id 필드를 그대로 재사용)
+    자세한 내용은 docs/scheduler_interface.md 참고.
     """
     task_id: str
     experiment_id: str
@@ -278,9 +284,9 @@ class Task(BaseModel):
     step_code: str                  # 원본 프로토콜 추적용: "D-1", "F-2" 등
     operation: OperationType
     parameters: dict[str, Any]      # OPERATION_PARAM_MODEL로 검증된 값 (dict로 저장)
-    device_id: Optional[str] = None  # Manual인 경우 None
-    input_refs: list[str] = []      # 참조하는 이전 Sample.sample_id들
-    output_refs: list[str] = []     # 이 Task가 생성하는 Sample.sample_id들
+    device_id: Optional[str] = None  # Manual인 경우 None — job schema의 "device"
+    input_refs: list[str] = []      # 참조하는 이전 Sample.sample_id들 (물질 흐름)
+    output_refs: list[str] = []     # 이 Task가 생성하는 Sample.sample_id들 (물질 흐름)
     repeat_of: Optional[RepeatParams] = None
     order_critical: bool = False    # TRANSFER의 order_critical과 별개로 Task 레벨에서도 노출
     status: Literal[
@@ -291,8 +297,39 @@ class Task(BaseModel):
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
 
+    # ── Scheduler 인터페이스 필드 (job schema: value/duration/device/precedence/deadline) ──
+    scheduler_value: Optional[float] = None
+    # 이 Task 결과가 학습(BO 캠페인)에 얼마나 가치있는지 — Yuhyun의 최적화 플랫폼이 채움.
+    # 값이 클수록 "이 결과를 빨리 알수록 다음 실험 설계가 좋아진다"는 뜻.
+
+    scheduler_duration_estimate_sec: Optional[float] = None
+    # 예상 실행 시간(초). parameters 안의 duration_h 등과는 별개로,
+    # 스케줄러가 여러 오퍼레이션을 비교할 때 쓸 수 있는 통일된 단위.
+
+    scheduler_precedence: list[str] = []
+    # 이 Task가 실행되기 전에 반드시 끝나야 하는 다른 Task의 task_id 목록.
+    # input_refs(물질 참조)와는 목적이 다름 — precedence는 순서 제약 그 자체를 표현.
+
+    scheduler_deadline: Optional[datetime] = None
+    # 이 Task가 속한 캠페인의 마감 시한 (finite campaign horizon).
+
+    scheduler_priority: Optional[int] = None
+    # 스케줄러가 계산 후 돌려주는 실행 순서 (낮을수록 먼저 실행). None이면 아직 미배정.
+
     def required_device_type(self) -> str:
         return OPERATION_REQUIRED_DEVICE_TYPE[self.operation]
+
+    def to_scheduler_job(self) -> dict:
+        """스케줄러가 읽을 job schema 형태로 변환: {value, duration, device, precedence, deadline}."""
+        return {
+            "job_id": self.task_id,
+            "value": self.scheduler_value,
+            "duration": self.scheduler_duration_estimate_sec,
+            "device": self.device_id,
+            "precedence": self.scheduler_precedence,
+            "deadline": self.scheduler_deadline,
+            "status": self.status,
+        }
 
 
 class Device(BaseModel):
