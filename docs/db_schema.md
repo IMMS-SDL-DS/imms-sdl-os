@@ -199,6 +199,24 @@ masking table 개념). `src/database/mongo_client.py`에 이를 위한 3개 함�
 테스트는 실제 Atlas 연결 없이 `mongomock`(가짜 MongoDB)으로 검증한다
 (`tests/test_device_locking.py`).
 
+## Action 레벨 세부 실행 로그 (고체 분주 등)
+
+Task(예: DISPENSE_SOLID) 안에서 일어나는 로봇팔/저울의 세부 동작을 `Task.actions:
+list[Action]`으로 기록한다. 12단계 고체 분주 workflow가 7개 재사용 가능한
+`ActionType`(PICK/PLACE/MOUNT/RETRACT/DOOR_OPEN/DOOR_CLOSE/DOSE)으로 일반화되어
+13개 Action(6번 단계가 RETRACT+DOOR_CLOSE로 분리)으로 저장된다.
+
+`Action.safety_critical=True`인 Action(RETRACT 직후 DOOR_CLOSE)은 이전 Action이
+반드시 success여야 진행 가능 — `Task.validate_action_safety_order()`로 검증.
+이건 기존 `order_critical`(물질 흐름 순서)과 다른 카테고리로, **물리적 충돌 방지**용 순서
+제약이다.
+
+`Task.material_usage: Optional[MaterialUsage]`로 실제 사용한 물질(metal/ligand/
+solvent/modulator)의 이름·농도·목표질량·실측질량·헤드ID·바이알ID를 기록한다.
+`Experiment.reagents`가 "계획값"이라면 이건 "이번 배치에 실제로 쓴 값".
+
+자세한 설계 근거는 `docs/solid_dosing_workflow.md` 참고.
+
 ## TODO
 - [x] Unit Operation Schema를 Pydantic 모델로 구현 (`src/database/models.py`)
 - [x] 실제 프로토콜을 JSON 데이터로 구조화 (`data/protocols/zr_btc_mof_protocol.json`)

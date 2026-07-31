@@ -165,10 +165,15 @@ class MaterialUsage(BaseModel):
 
 ## 6. 다음 단계 (코드 구현 체크리스트)
 
-- [ ] `ActionType` enum + `Action` Pydantic 모델 (`src/database/models.py`에 추가)
-- [ ] `MaterialRole` enum + `MaterialUsage` Pydantic 모델
-- [ ] `Task.actions: list[Action]`, `Task.material_usage: Optional[MaterialUsage]` 필드 추가
-- [ ] `run_dispense_command()`를 13단계 Action 시퀀스를 생성하도록 확장
-- [ ] RETRACT→DOOR_CLOSE 안전 순서 검증 로직 (실패 시 flow 중단)
-- [ ] mongomock 테스트: Action 시퀀스 생성, 안전 순서 위반 시 에러, MaterialUsage 기록 확인
+- [x] `ActionType` enum + `Action` Pydantic 모델 (`src/database/models.py`에 추가)
+- [x] `MaterialRole` enum + `MaterialUsage` Pydantic 모델
+- [x] `Task.actions: list[Action]`, `Task.material_usage: Optional[MaterialUsage]` 필드 추가
+- [x] `Task.build_solid_dosing_actions()` — 13단계 Action 시퀀스 생성
+- [x] `Task.validate_action_safety_order()` — RETRACT→DOOR_CLOSE 안전 순서 검증 (위반 시 ValueError)
+- [x] pytest 테스트 8개 (Action 시퀀스 생성, 순서 일치, safety_critical 플래그, 안전 검증
+      정상/위반 케이스, MaterialUsage 부착·실측값 갱신) — 전체 테스트 31개 통과
+- [ ] `run_dispense_command()`가 실제로 `build_solid_dosing_actions()`를 호출하고
+      각 Action을 순서대로 실행하도록 연결 (지금은 모델만 있고, dispense_command.py의
+      실행 로직에는 아직 안 붙임)
+- [ ] MongoDB에 Action이 embedded list로 잘 저장/조회되는지 mongomock 테스트 추가
 - [ ] `docs/db_schema.md`에 Action/MaterialUsage 반영

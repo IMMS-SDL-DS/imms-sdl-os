@@ -266,6 +266,93 @@ class Experiment(BaseModel):
     notes: list[str] = []
 
 
+# ─────────────────────────────────────────────────────────────
+# Action 레벨 모델 — Task(예: DISPENSE_SOLID) 내부의 세부 로봇/저울 동작.
+# 설계 근거: docs/solid_dosing_workflow.md (선배가 준 고체 분주 12단계 workflow)
+# ─────────────────────────────────────────────────────────────
+
+class ActionType(str, Enum):
+    """
+    12단계 고체 분주 workflow를 7개의 재사용 가능한 타입으로 일반화한 것.
+    같은 타입이 여러 단계에서 반복 사용됨 (예: PICK은 헤드 집기·바이알 집기 둘 다).
+    """
+    PICK = "PICK"              # 로봇팔이 물체(헤드/바이알)를 집음
+    PLACE = "PLACE"            # 로봇팔이 물체를 내려놓음
+    MOUNT = "MOUNT"            # 헤드를 저울에 장착
+    RETRACT = "RETRACT"        # 로봇팔이 작업 공간 밖으로 빠져나옴
+    DOOR_OPEN = "DOOR_OPEN"    # 저울 문 열기
+    DOOR_CLOSE = "DOOR_CLOSE"  # 저울 문 닫기
+    DOSE = "DOSE"              # 설정량만큼 실제 계량 분주
+
+
+class Action(BaseModel):
+    """
+    DISPENSE_SOLID 같은 Task 하나 안에서 일어나는 세부 동작 1개.
+    선배가 준 12단계 workflow의 각 단계가 Action 레코드 하나에 대응한다
+    (6번 "로봇팔 빠짐→문 닫힘"은 RETRACT+DOOR_CLOSE 두 Action으로 쪼개져서 총 13개).
+    """
+    action_id: str
+    parent_task_id: str             # 이 Action이 속한 Task(예: DISPENSE_SOLID)의 task_id
+    sequence_index: int             # 1부터 시작하는 실행 순서
+    action_type: ActionType
+    object_ref: Optional[str] = None      # "head_ZrOCl2", "vial_003" 등 대상 물체
+    source_location: Optional[str] = None  # 어디서 (예: "head_rack")
+    dest_location: Optional[str] = None    # 어디로 (예: "balance_center")
+    status: Literal["pending", "running", "success", "failed"] = "pending"
+    safety_critical: bool = False
+    # True면 바로 이전 Action이 반드시 success여야 이 Action을 시작할 수 있음.
+    # 예: RETRACT가 성공해야 DOOR_CLOSE를 실행 — 안 그러면 로봇팔과 문이 충돌할 수 있음.
+    # 기존 Task.order_critical(물질 흐름 순서)과는 다른 카테고리: 이건 "물리적 충돌 방지"용.
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+
+
+# 12단계 workflow → 13개 Action 시퀀스로 확장하는 템플릿.
+# (parent_task_id, action_id는 실행 시점에 채워짐 — 여기선 타입/순서만 정의)
+SOLID_DOSING_ACTION_SEQUENCE: list[dict] = [
+    {"sequence_index": 1,  "action_type": ActionType.PICK,       "object_ref": "head", "source_location": "head_rack"},
+    {"sequence_index": 2,  "action_type": ActionType.MOUNT,      "object_ref": "head", "dest_location": "balance"},
+    {"sequence_index": 3,  "action_type": ActionType.PICK,       "object_ref": "vial", "source_location": "vial_rack"},
+    {"sequence_index": 4,  "action_type": ActionType.DOOR_OPEN},
+    {"sequence_index": 5,  "action_type": ActionType.PLACE,      "object_ref": "vial", "dest_location": "balance_center"},
+    {"sequence_index": 6,  "action_type": ActionType.RETRACT},
+    {"sequence_index": 7,  "action_type": ActionType.DOOR_CLOSE, "safety_critical": True},  # RETRACT(6) 성공 필수
+    {"sequence_index": 8,  "action_type": ActionType.DOSE,       "object_ref": "material"},
+    {"sequence_index": 9,  "action_type": ActionType.DOOR_OPEN},
+    {"sequence_index": 10, "action_type": ActionType.PICK,       "object_ref": "vial", "source_location": "balance_center"},
+    {"sequence_index": 11, "action_type": ActionType.DOOR_CLOSE},
+    {"sequence_index": 12, "action_type": ActionType.PLACE,      "object_ref": "vial", "dest_location": "vial_rack"},
+    {"sequence_index": 13, "action_type": ActionType.PLACE,      "object_ref": "head", "dest_location": "head_rack"},
+]
+
+
+# ─────────────────────────────────────────────────────────────
+# Material 추적 모델 — metal/ligand/solvent 등 실제 사용 물질 기록
+# ─────────────────────────────────────────────────────────────
+
+class MaterialRole(str, Enum):
+    METAL = "metal"
+    LIGAND = "ligand"
+    SOLVENT = "solvent"
+    MODULATOR = "modulator"
+
+
+class MaterialUsage(BaseModel):
+    """
+    DISPENSE_SOLID Task 하나에 자연스럽게 1:1로 붙는 실제 사용 물질 기록.
+    Experiment.reagents(ReagentSpec)가 "계획값"이라면, 이건 "이번 배치에 실제로
+    어떤 물질을 얼마나 썼는지"를 실행 시점에 기록하는 값.
+    """
+    material_name: str              # "ZrOCl2"
+    role: MaterialRole
+    concentration: Optional[float] = None
+    concentration_unit: Optional[str] = None   # "M", "mg/mL" 등
+    target_mass_mg: float
+    actual_mass_mg: Optional[float] = None     # VERIFY_MASS 결과로 채워짐
+    head_id: Optional[str] = None              # 어느 도징헤드 카트리지를 썼는지
+    vial_id: Optional[str] = None
+
+
 class Task(BaseModel):
     """
     프로토콜의 개별 Step 1개 (예: "D-1")에 대응.
@@ -277,6 +364,10 @@ class Task(BaseModel):
     job schema 계약: {value, duration, device, precedence, deadline}
     (device는 이미 있는 device_id 필드를 그대로 재사용)
     자세한 내용은 docs/scheduler_interface.md 참고.
+
+    actions / material_usage는 고체 분주처럼 세부 로봇 동작·물질 추적이 필요한 Task에서만
+    채워진다 (예: DISPENSE_SOLID). 다른 오퍼레이션은 비워둬도 됨.
+    자세한 내용은 docs/solid_dosing_workflow.md 참고.
     """
     task_id: str
     experiment_id: str
@@ -296,6 +387,10 @@ class Task(BaseModel):
     prefect_task_run_id: Optional[str] = None
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
+
+    # ── Action 레벨 세부 실행 로그 (고체 분주 등에서 사용) ──────────────
+    actions: list[Action] = []
+    material_usage: Optional[MaterialUsage] = None
 
     # ── Scheduler 인터페이스 필드 (job schema: value/duration/device/precedence/deadline) ──
     scheduler_value: Optional[float] = None
@@ -330,6 +425,36 @@ class Task(BaseModel):
             "deadline": self.scheduler_deadline,
             "status": self.status,
         }
+
+    def build_solid_dosing_actions(self) -> list[Action]:
+        """
+        SOLID_DOSING_ACTION_SEQUENCE 템플릿으로 이 Task의 13개 Action을 생성해서
+        self.actions에 채운다. DISPENSE_SOLID Task에서 호출하는 용도.
+        """
+        built: list[Action] = []
+        for i, tmpl in enumerate(SOLID_DOSING_ACTION_SEQUENCE):
+            built.append(Action(
+                action_id=f"{self.task_id}_action{i+1}",
+                parent_task_id=self.task_id,
+                **tmpl,
+            ))
+        self.actions = built
+        return built
+
+    def validate_action_safety_order(self) -> None:
+        """
+        safety_critical Action은 바로 이전 Action이 success여야 한다.
+        위반 시 ValueError를 던진다 (예: RETRACT 실패했는데 DOOR_CLOSE가 진행된 경우).
+        """
+        for i, action in enumerate(self.actions):
+            if action.safety_critical and i > 0:
+                prev = self.actions[i - 1]
+                if prev.status != "success":
+                    raise ValueError(
+                        f"안전 순서 위반: {action.action_type}(#{action.sequence_index})은 "
+                        f"이전 Action({prev.action_type}, status={prev.status})이 success여야 "
+                        f"실행 가능합니다."
+                    )
 
 
 class Device(BaseModel):
