@@ -204,13 +204,17 @@ class ErrorRecord(BaseModel):
 
 ## 5. 종합: 새로 필요한 모델 목록 (코드 구현 시 체크리스트)
 
-- [ ] `DeviceState` — 실시간 State Data (§1-1)
-- [ ] `MaterialUsage.error_rate_pct` 필드 추가 (§1-3)
-- [ ] `TaskHandoff` — Task 간 데이터 연동 표준 봉투 (§2)
-- [ ] `ActionType.STABILIZE` + `StabilizeParams`, 시퀀스에 2곳 삽입 (§3-1)
-- [ ] `ToleranceDecision` enum + 판단 로직 함수 (§3-2)
-- [ ] `ErrorCategory` enum + `ErrorRecord` 모델, `Task.errors` 필드 (§3-3)
-- [ ] `get_pipeline_summary(experiment_id)` — Task 체인을 따라가며 최종 로그 조립 (§2)
+- [x] `DeviceState` — 실시간 State Data (§1-1)
+- [x] `MaterialUsage.error_rate_pct` 필드 + `compute_error_rate()` 메서드 (§1-3)
+- [x] `TaskHandoff` — Task 간 데이터 연동 표준 봉투, `TaskHandoff.from_task()` 헬퍼 (§2)
+- [x] `ActionType.STABILIZE` + `StabilizeParams`, 시퀀스에 2곳 삽입 (13→15단계) (§3-1)
+- [x] `ToleranceDecision` enum + `decide_tolerance()` 판단 함수 (§3-2)
+- [x] `ErrorCategory` enum + `ErrorRecord` 모델, `Task.errors` 필드 (§3-3)
+- [x] `get_pipeline_summary(db, experiment_id)` — Task들을 모아 최종 로그 요약 조립 (§2)
+- [x] `save_device_state()` / `get_device_state()` — DeviceState 저장/조회 (§1-1)
+- [x] 테스트 16개 추가 (`test_solid_dosing_actions.py` 확장 + `test_pipeline_summary.py` 신설)
+      — 전체 테스트 44개 전부 통과
 
 **보류 중** (실험팀 자료 도착 후 확정): `tolerance_mg` 실제 값, `stability_threshold_mg`
-실제 값, `Sample.properties` 세부 필드명
+실제 값, `Sample.properties` 세부 필드명. 지금은 기본값(`stability_threshold_mg=0.1`,
+`max_wait_sec=30.0`)으로 임시 설정해둠 — 실제 값 오면 교체 필요.

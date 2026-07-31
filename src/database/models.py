@@ -273,7 +273,7 @@ class Experiment(BaseModel):
 
 class ActionType(str, Enum):
     """
-    12단계 고체 분주 workflow를 7개의 재사용 가능한 타입으로 일반화한 것.
+    12단계 고체 분주 workflow를 재사용 가능한 타입으로 일반화한 것.
     같은 타입이 여러 단계에서 반복 사용됨 (예: PICK은 헤드 집기·바이알 집기 둘 다).
     """
     PICK = "PICK"              # 로봇팔이 물체(헤드/바이알)를 집음
@@ -283,6 +283,13 @@ class ActionType(str, Enum):
     DOOR_OPEN = "DOOR_OPEN"    # 저울 문 열기
     DOOR_CLOSE = "DOOR_CLOSE"  # 저울 문 닫기
     DOSE = "DOSE"              # 설정량만큼 실제 계량 분주
+    STABILIZE = "STABILIZE"    # 저울 값이 안정화될 때까지 대기 (무게를 재기 직전마다 필요)
+
+
+class StabilizeParams(BaseModel):
+    """STABILIZE Action의 파라미터. 실제 임계값은 실험팀 자료 도착 후 확정 예정."""
+    stability_threshold_mg: float = 0.1   # 이 범위 안에서 변화 없으면 "안정"으로 판단
+    max_wait_sec: float = 30.0            # 이 시간 넘으면 타임아웃
 
 
 class Action(BaseModel):
@@ -303,12 +310,14 @@ class Action(BaseModel):
     # True면 바로 이전 Action이 반드시 success여야 이 Action을 시작할 수 있음.
     # 예: RETRACT가 성공해야 DOOR_CLOSE를 실행 — 안 그러면 로봇팔과 문이 충돌할 수 있음.
     # 기존 Task.order_critical(물질 흐름 순서)과는 다른 카테고리: 이건 "물리적 충돌 방지"용.
+    parameters: dict[str, Any] = {}   # StabilizeParams 등 Action별 세부 파라미터 (dict로 저장)
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
 
 
-# 12단계 workflow → 13개 Action 시퀀스로 확장하는 템플릿.
+# 12단계 workflow → 15개 Action 시퀀스로 확장하는 템플릿.
 # (parent_task_id, action_id는 실행 시점에 채워짐 — 여기선 타입/순서만 정의)
+# STABILIZE가 2곳 추가됨: 무게를 재려는 시점(도징 직전, 도징 직후) 직전마다 삽입.
 SOLID_DOSING_ACTION_SEQUENCE: list[dict] = [
     {"sequence_index": 1,  "action_type": ActionType.PICK,       "object_ref": "head", "source_location": "head_rack"},
     {"sequence_index": 2,  "action_type": ActionType.MOUNT,      "object_ref": "head", "dest_location": "balance"},
@@ -317,13 +326,36 @@ SOLID_DOSING_ACTION_SEQUENCE: list[dict] = [
     {"sequence_index": 5,  "action_type": ActionType.PLACE,      "object_ref": "vial", "dest_location": "balance_center"},
     {"sequence_index": 6,  "action_type": ActionType.RETRACT},
     {"sequence_index": 7,  "action_type": ActionType.DOOR_CLOSE, "safety_critical": True},  # RETRACT(6) 성공 필수
-    {"sequence_index": 8,  "action_type": ActionType.DOSE,       "object_ref": "material"},
-    {"sequence_index": 9,  "action_type": ActionType.DOOR_OPEN},
-    {"sequence_index": 10, "action_type": ActionType.PICK,       "object_ref": "vial", "source_location": "balance_center"},
-    {"sequence_index": 11, "action_type": ActionType.DOOR_CLOSE},
-    {"sequence_index": 12, "action_type": ActionType.PLACE,      "object_ref": "vial", "dest_location": "vial_rack"},
-    {"sequence_index": 13, "action_type": ActionType.PLACE,      "object_ref": "head", "dest_location": "head_rack"},
+    {"sequence_index": 8,  "action_type": ActionType.STABILIZE,  "parameters": {"stability_threshold_mg": 0.1, "max_wait_sec": 30.0}},
+    {"sequence_index": 9,  "action_type": ActionType.DOSE,       "object_ref": "material"},
+    {"sequence_index": 10, "action_type": ActionType.STABILIZE,  "parameters": {"stability_threshold_mg": 0.1, "max_wait_sec": 30.0}},
+    {"sequence_index": 11, "action_type": ActionType.DOOR_OPEN},
+    {"sequence_index": 12, "action_type": ActionType.PICK,       "object_ref": "vial", "source_location": "balance_center"},
+    {"sequence_index": 13, "action_type": ActionType.DOOR_CLOSE},
+    {"sequence_index": 14, "action_type": ActionType.PLACE,      "object_ref": "vial", "dest_location": "vial_rack"},
+    {"sequence_index": 15, "action_type": ActionType.PLACE,      "object_ref": "head", "dest_location": "head_rack"},
 ]
+
+
+# ─────────────────────────────────────────────────────────────
+# 에러 로깅 스키마 (§3-3 data_pipeline_and_error_handling.md)
+# ─────────────────────────────────────────────────────────────
+
+class ErrorCategory(str, Enum):
+    COMMUNICATION = "communication"                   # 장비 통신 오류
+    TARGET_NOT_REACHED = "target_not_reached"          # 목표 무게 도달 실패 (보정 한도 초과)
+    SAFETY_VIOLATION = "safety_violation"              # 안전 순서 위반 (RETRACT 실패 등)
+    STABILIZATION_TIMEOUT = "stabilization_timeout"    # 저울 값이 max_wait_sec 안에 안정 안 됨
+    UNKNOWN = "unknown"
+
+
+class ErrorRecord(BaseModel):
+    error_id: str
+    task_id: str
+    action_id: Optional[str] = None    # 어느 Action에서 발생했는지 (있으면)
+    category: ErrorCategory
+    message: str
+    occurred_at: datetime = Field(default_factory=datetime.now)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -351,6 +383,42 @@ class MaterialUsage(BaseModel):
     actual_mass_mg: Optional[float] = None     # VERIFY_MASS 결과로 채워짐
     head_id: Optional[str] = None              # 어느 도징헤드 카트리지를 썼는지
     vial_id: Optional[str] = None
+    error_rate_pct: Optional[float] = None     # (actual - target) / target * 100
+
+    def compute_error_rate(self) -> Optional[float]:
+        """actual_mass_mg가 채워져 있으면 error_rate_pct를 계산해서 채우고 반환."""
+        if self.actual_mass_mg is None or self.target_mass_mg == 0:
+            return None
+        self.error_rate_pct = (self.actual_mass_mg - self.target_mass_mg) / self.target_mass_mg * 100
+        return self.error_rate_pct
+
+
+class ToleranceDecision(str, Enum):
+    WITHIN_TOLERANCE = "within_tolerance"   # 정상, 다음 단계 진행
+    CORRECTION_DOSE = "correction_dose"     # 부족분만큼 추가 도징 시도
+    FAIL_VIAL = "fail_vial"                 # 이 바이알은 포기, Task를 failed로 기록
+
+
+def decide_tolerance(
+    target_mass_mg: float,
+    actual_mass_mg: float,
+    tolerance_mg: float,
+    correction_attempts: int = 0,
+    max_correction_attempts: int = 2,
+) -> ToleranceDecision:
+    """
+    §3-2 오차 범위 대응 판단 로직.
+    실제 tolerance_mg 값은 DispenseSolidParams.tolerance_mg(실험팀 자료로 확정 예정)를 그대로 사용.
+    CORRECTION_DOSE는 "무작정 재시도"가 아니라 "부족량을 알고 그만큼만 추가하는" 안전한 보정이므로
+    SAFE_TO_RETRY_OPERATIONS 재시도 금지 원칙과는 별개 — 다만 무한 루프 방지를 위해
+    max_correction_attempts로 횟수를 제한한다.
+    """
+    error = actual_mass_mg - target_mass_mg
+    if abs(error) <= tolerance_mg:
+        return ToleranceDecision.WITHIN_TOLERANCE
+    if error < 0 and correction_attempts < max_correction_attempts:
+        return ToleranceDecision.CORRECTION_DOSE
+    return ToleranceDecision.FAIL_VIAL
 
 
 class Task(BaseModel):
@@ -391,6 +459,7 @@ class Task(BaseModel):
     # ── Action 레벨 세부 실행 로그 (고체 분주 등에서 사용) ──────────────
     actions: list[Action] = []
     material_usage: Optional[MaterialUsage] = None
+    errors: list[ErrorRecord] = []
 
     # ── Scheduler 인터페이스 필드 (job schema: value/duration/device/precedence/deadline) ──
     scheduler_value: Optional[float] = None
@@ -468,6 +537,20 @@ class Device(BaseModel):
     last_used_at: Optional[datetime] = None
 
 
+class DeviceState(BaseModel):
+    """
+    장비의 실시간 물리 상태(State Data, §1-1). Device.status(락 상태)와는 별개 —
+    매 순간 갱신되는 텔레메트리. device_id 기준으로 최신 스냅샷 하나만 upsert 저장하는
+    용도 (이력이 필요하면 나중에 device_state_log 컬렉션으로 확장).
+    """
+    device_id: str
+    door_status: Optional[Literal["open", "closed"]] = None
+    current_reading_mg: Optional[float] = None
+    is_stable: Optional[bool] = None
+    safety_sensor_active: Optional[bool] = None
+    recorded_at: datetime = Field(default_factory=datetime.now)
+
+
 class Sample(BaseModel):
     """
     프로토콜 상의 중간/최종 산출물.
@@ -482,6 +565,39 @@ class Sample(BaseModel):
     consumed_by_task_ids: list[str] = []
     properties: dict[str, Any] = {}  # XRD peak 리스트, 실측 mass 등
     created_at: datetime = Field(default_factory=datetime.now)
+
+
+# ─────────────────────────────────────────────────────────────
+# Task 간 데이터 연동 표준 봉투 (§2 data_pipeline_and_error_handling.md)
+# ─────────────────────────────────────────────────────────────
+
+class TaskHandoff(BaseModel):
+    """
+    Prefect Task 함수가 다음 Task 함수에게 넘겨주는 표준 데이터 형식.
+    MongoDB 저장용 스키마(Task 문서)와는 별개 — 이건 "메모리 상에서 Task 간 전달되는 값".
+
+    예: 고체 분주 Task의 TaskHandoff.material_usage.actual_mass_mg를
+    다음 액체 분주 Task가 받아서, 목표 농도를 유지하도록 액체 투입량을 재계산한다.
+    (target이 아니라 actual을 기준으로 다음 계산을 하는 게 원칙.)
+    """
+    source_task_id: str
+    status: Literal["success", "failed", "held"]
+    output_sample_ids: list[str] = []
+    material_usage: Optional[MaterialUsage] = None
+    actual_values: dict[str, Any] = {}
+    errors: list[ErrorRecord] = []
+
+    @classmethod
+    def from_task(cls, task: "Task") -> "TaskHandoff":
+        """완료된 Task로부터 TaskHandoff를 만드는 헬퍼."""
+        return cls(
+            source_task_id=task.task_id,
+            status=task.status if task.status in ("success", "failed", "held") else "failed",
+            output_sample_ids=task.output_refs,
+            material_usage=task.material_usage,
+            actual_values=task.actual_values,
+            errors=task.errors,
+        )
 
 
 # ─────────────────────────────────────────────────────────────

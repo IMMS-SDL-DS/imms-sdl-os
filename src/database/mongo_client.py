@@ -246,6 +246,42 @@ def apply_scheduler_ordering(db: Database, ordering: list[str]) -> int:
     return updated
 
 
+# ── DeviceState (State Data) 저장/조회 ────────────────────────────────
+def save_device_state(db: Database, state) -> None:
+    """DeviceState 최신 스냅샷을 device_id 기준으로 덮어쓴다 (이력 아님, 최신값만)."""
+    db["device_state"].update_one(
+        {"device_id": state.device_id},
+        {"$set": state.model_dump()},
+        upsert=True,
+    )
+
+
+def get_device_state(db: Database, device_id: str) -> Optional[dict]:
+    return db["device_state"].find_one({"device_id": device_id})
+
+
+# ── 파이프라인 최종 로그 통합 (§2 data_pipeline_and_error_handling.md) ──
+def get_pipeline_summary(db: Database, experiment_id: str) -> list[dict]:
+    """
+    한 Experiment(캠페인)에 속한 모든 Task를 step_code 순으로 모아서,
+    각 Task의 material_usage(target/actual/error_rate)와 errors를 요약해서 반환한다.
+    Task.input_refs/output_refs로 이미 연결된 체인을 그대로 순회하는 대신,
+    지금은 단순히 experiment_id로 필터링 후 step_code 정렬로 구현
+    (Phase/Step 순서가 이미 실행 순서와 일치하므로 충분).
+    """
+    tasks = db["task"].find({"experiment_id": experiment_id}).sort("step_code", 1)
+    summary = []
+    for t in tasks:
+        summary.append({
+            "task_id": t["task_id"],
+            "operation": t["operation"],
+            "status": t["status"],
+            "material_usage": t.get("material_usage"),
+            "errors": t.get("errors", []),
+        })
+    return summary
+
+
 if __name__ == "__main__":
     # 연결 테스트: python -m src.database.mongo_client
     database = get_database()
