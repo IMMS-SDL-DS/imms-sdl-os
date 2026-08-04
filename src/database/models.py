@@ -315,9 +315,15 @@ class Action(BaseModel):
     ended_at: Optional[datetime] = None
 
 
-# 12단계 workflow → 15개 Action 시퀀스로 확장하는 템플릿.
+# 12단계 workflow → 16개 Action 시퀀스로 확장하는 템플릿.
 # (parent_task_id, action_id는 실행 시점에 채워짐 — 여기선 타입/순서만 정의)
 # STABILIZE가 2곳 추가됨: 무게를 재려는 시점(도징 직전, 도징 직후) 직전마다 삽입.
+#
+# RETRACT는 2곳(6번, 13번) — 원본 12단계 문서에서 "빠져나간 뒤 문이 닫히고"(6번)와
+# "잡은 뒤 빼고"(9번)의 표현이 달라 PICK이 후퇴까지 포함하는지 불확실했으나, 로봇-문
+# 충돌을 막는 안전 문제라 두 DOOR_CLOSE 모두 RETRACT 확인 후 닫히도록 대칭으로 설계함
+# (PICK이 실제로 후퇴까지 포함한다면 RETRACT는 이미 끝난 상태를 한 번 더 기록할 뿐이라
+# 손해가 없고, 분리된 동작이라면 실제 충돌을 막아줌 — 확인될 때까지 안전한 쪽으로 유지).
 SOLID_DOSING_ACTION_SEQUENCE: list[dict] = [
     {"sequence_index": 1,  "action_type": ActionType.PICK,       "object_ref": "head", "source_location": "head_rack"},
     {"sequence_index": 2,  "action_type": ActionType.MOUNT,      "object_ref": "head", "dest_location": "balance"},
@@ -331,9 +337,10 @@ SOLID_DOSING_ACTION_SEQUENCE: list[dict] = [
     {"sequence_index": 10, "action_type": ActionType.STABILIZE,  "parameters": {"stability_threshold_mg": 0.1, "max_wait_sec": 30.0}},
     {"sequence_index": 11, "action_type": ActionType.DOOR_OPEN},
     {"sequence_index": 12, "action_type": ActionType.PICK,       "object_ref": "vial", "source_location": "balance_center"},
-    {"sequence_index": 13, "action_type": ActionType.DOOR_CLOSE},
-    {"sequence_index": 14, "action_type": ActionType.PLACE,      "object_ref": "vial", "dest_location": "vial_rack"},
-    {"sequence_index": 15, "action_type": ActionType.PLACE,      "object_ref": "head", "dest_location": "head_rack"},
+    {"sequence_index": 13, "action_type": ActionType.RETRACT},
+    {"sequence_index": 14, "action_type": ActionType.DOOR_CLOSE, "safety_critical": True},  # RETRACT(13) 성공 필수
+    {"sequence_index": 15, "action_type": ActionType.PLACE,      "object_ref": "vial", "dest_location": "vial_rack"},
+    {"sequence_index": 16, "action_type": ActionType.PLACE,      "object_ref": "head", "dest_location": "head_rack"},
 ]
 
 
@@ -497,11 +504,22 @@ class Task(BaseModel):
 
     def build_solid_dosing_actions(self) -> list[Action]:
         """
-        SOLID_DOSING_ACTION_SEQUENCE 템플릿으로 이 Task의 13개 Action을 생성해서
+        SOLID_DOSING_ACTION_SEQUENCE 템플릿으로 이 Task의 16개 Action을 생성해서
         self.actions에 채운다. DISPENSE_SOLID Task에서 호출하는 용도.
         """
         built: list[Action] = []
         for i, tmpl in enumerate(SOLID_DOSING_ACTION_SEQUENCE):
+            tmpl = dict(tmpl)  # 원본 템플릿 dict 오염 방지 (얕은 복사로 충분 — parameters도 아래서 새로 만듦)
+            if tmpl["action_type"] == ActionType.DOSE:
+                # ActionDriver는 Action만 받고 Task는 못 보므로(action_driver.py의 ActionDriver
+                # 시그니처 참고), Task.parameters(DispenseSolidParams)의 목표치를 여기서
+                # DOSE Action.parameters에 미리 심어준다. 이걸 안 하면 DOSE 드라이버가
+                # 목표 중량을 알 방법이 없다.
+                tmpl["parameters"] = {
+                    **tmpl.get("parameters", {}),
+                    "target_mass_mg": self.parameters.get("mass_mg"),
+                    "tolerance_mg": self.parameters.get("tolerance_mg", 5.0),
+                }
             built.append(Action(
                 action_id=f"{self.task_id}_action{i+1}",
                 parent_task_id=self.task_id,
@@ -542,6 +560,10 @@ class DeviceState(BaseModel):
     장비의 실시간 물리 상태(State Data, §1-1). Device.status(락 상태)와는 별개 —
     매 순간 갱신되는 텔레메트리. device_id 기준으로 최신 스냅샷 하나만 upsert 저장하는
     용도 (이력이 필요하면 나중에 device_state_log 컬렉션으로 확장).
+
+    저울(balance)도 Device의 한 종류(device_type="balance")일 뿐이므로 별도
+    "BalanceState" 클래스를 두지 않고 이 모델을 그대로 재사용한다.
+    예: DeviceState(device_id="dev_multidose_balance", door_status=..., current_reading_mg=...)
     """
     device_id: str
     door_status: Optional[Literal["open", "closed"]] = None
@@ -549,6 +571,20 @@ class DeviceState(BaseModel):
     is_stable: Optional[bool] = None
     safety_sensor_active: Optional[bool] = None
     recorded_at: datetime = Field(default_factory=datetime.now)
+
+
+class DosingHead(BaseModel):
+    """
+    MultiDose 카트리지 판에 걸려있는 개별 도징헤드 레지스트리.
+    "이 물질을 쓰려면 어느 헤드를 골라야 하는지" 매핑해주는 용도 —
+    MaterialUsage.head_id, Action(PICK/MOUNT, object_ref="head")와 연결된다.
+    """
+    head_id: str
+    material_name: str              # "ZrOCl2" — MaterialUsage.material_name과 매칭
+    rack_position: Optional[str] = None    # 헤드 판에서의 위치 (예: "slot_12")
+    remaining_mass_mg: Optional[float] = None
+    status: Literal["available", "in_use", "empty", "maintenance"] = "available"
+    last_used_at: Optional[datetime] = None
 
 
 class Sample(BaseModel):
@@ -610,7 +646,7 @@ if __name__ == "__main__":
         OperationType.TRANSFER,
         {"source": "ligand_sol", "dest": "metal_sol", "volume_ml": None, "order_critical": True},
     )
-    print("✅ TRANSFER 파라미터 검증 통과:", params)
+    print("TRANSFER 파라미터 검증 통과:", params)
 
     task = Task(
         task_id="task_D1",
@@ -624,4 +660,4 @@ if __name__ == "__main__":
         output_refs=["sample_rxn_mixture"],
         order_critical=True,
     )
-    print("✅ Task 모델 생성 완료:", task.required_device_type())
+    print("Task 모델 생성 완료:", task.required_device_type())
