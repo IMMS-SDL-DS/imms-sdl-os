@@ -2,7 +2,7 @@
 
 ## MOF 실험 데이터 스키마 정리
 
-![MOF 실험 데이터 스키마 구조도](images/mof_experiment_schema_diagram.png)
+![MOF 실험 데이터 스키마 구조도](imms-sdl-os/docs/images/mof_experiment_schema_diagram.png)
 
 ### 4단계 계층
 
