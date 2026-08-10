@@ -54,6 +54,47 @@ class FakeRTDE:
         return [999.0, 999.0, 999.0, 0.0, 0.0, 0.0]  # 목표와 멀리 떨어진 값
 
 
+class FakeGripper:
+    """RobotiqGripper 흉내 — close/open/waitForMotionComplete/getVar('OBJ')만 구현."""
+
+    def __init__(self, obj_status_after_close: int = 1, obj_status_after_open: int = 3):
+        self.obj_status_after_close = obj_status_after_close
+        self.obj_status_after_open = obj_status_after_open
+        self._last_action: str | None = None
+        self.connected = False
+        self.activated = False
+
+    def connect(self, timeout_ms: int = 2000):
+        self.connected = True
+
+    def isConnected(self):
+        return self.connected
+
+    def isActive(self):
+        return self.activated
+
+    def activate(self, auto_calibrate: bool = False):
+        self.activated = True
+
+    def close(self, *args, **kwargs):
+        self._last_action = "close"
+
+    def open(self, *args, **kwargs):
+        self._last_action = "open"
+
+    def waitForMotionComplete(self):
+        return None
+
+    def getVar(self, var: str) -> int:
+        if var != "OBJ":
+            raise ValueError(f"unexpected var: {var}")
+        if self._last_action == "close":
+            return self.obj_status_after_close
+        if self._last_action == "open":
+            return self.obj_status_after_open
+        return ur3e_driver.OBJ_MOVING
+
+
 def _action(action_type, **kwargs) -> Action:
     return Action(
         action_id="a1", parent_task_id="t1", sequence_index=1,
@@ -61,30 +102,70 @@ def _action(action_type, **kwargs) -> Action:
     )
 
 
-def _patch(monkeypatch, fake: FakeRTDE):
+def _patch(monkeypatch, fake: FakeRTDE, fake_gripper: "FakeGripper | None" = None):
     monkeypatch.setattr(ur3e_driver, "get_connection", lambda: fake)
     monkeypatch.setattr(ur3e_driver, "get_receive_connection", lambda: fake)
+    if fake_gripper is not None:
+        monkeypatch.setattr(ur3e_driver, "get_gripper", lambda: fake_gripper)
 
 
 # ── 정상 동작 ─────────────────────────────────────────────────────────
-def test_pick_driver_moves_to_source_location(monkeypatch):
+def test_pick_driver_grips_object_after_moving(monkeypatch):
+    """PICK: 이동 성공 + 그리퍼가 실제로 뭔가 쥐었으면(OBJ=1 또는 2) 성공."""
     fake = FakeRTDE()
-    _patch(monkeypatch, fake)
+    fake_gripper = FakeGripper(obj_status_after_close=1)  # 바깥쪽 그립 성공
+    _patch(monkeypatch, fake, fake_gripper)
 
     result = ur3e_driver.pick_driver(_action(ActionType.PICK, source_location="head_rack"))
 
     assert result["success"] is True
-    assert len(fake.moveL_calls) == 1
+    assert result["object_status"] == 1
 
 
-def test_place_driver_moves_to_dest_location(monkeypatch):
+def test_pick_driver_fails_when_gripper_finds_nothing(monkeypatch):
+    """PICK: 이동은 성공했지만 그리퍼가 허공을 쥐었으면(OBJ=3) 실패해야 함."""
     fake = FakeRTDE()
-    _patch(monkeypatch, fake)
+    fake_gripper = FakeGripper(obj_status_after_close=3)  # 물체 없이 끝까지 닫힘
+    _patch(monkeypatch, fake, fake_gripper)
+
+    result = ur3e_driver.pick_driver(_action(ActionType.PICK, source_location="vial_rack"))
+
+    assert result["success"] is False
+
+
+def test_pick_driver_skips_gripper_when_move_fails(monkeypatch):
+    """이동 자체가 실패하면 그리퍼는 아예 시도하지 않아야 함."""
+    fake = FakeRTDE(within_limits=False)
+    fake_gripper = FakeGripper()
+    _patch(monkeypatch, fake, fake_gripper)
+
+    result = ur3e_driver.pick_driver(_action(ActionType.PICK, source_location="head_rack"))
+
+    assert result["success"] is False
+    assert fake_gripper._last_action is None  # 그리퍼 명령 자체가 안 나감
+
+
+def test_place_driver_releases_object_after_moving(monkeypatch):
+    """PLACE: 이동 성공 + 그리퍼가 완전히 열려서 물체가 없으면(OBJ=3) 성공."""
+    fake = FakeRTDE()
+    fake_gripper = FakeGripper(obj_status_after_open=3)
+    _patch(monkeypatch, fake, fake_gripper)
 
     result = ur3e_driver.place_driver(_action(ActionType.PLACE, dest_location="vial_rack"))
 
     assert result["success"] is True
     assert fake.moveL_calls[0] == ur3e_driver.LOCATION_POSES["vial_rack"]
+
+
+def test_place_driver_fails_when_object_still_held(monkeypatch):
+    """PLACE: 그리퍼를 열었는데도 OBJ가 3이 아니면(뭔가 걸림) 실패로 처리."""
+    fake = FakeRTDE()
+    fake_gripper = FakeGripper(obj_status_after_open=1)  # 비정상 — 열었는데 뭔가 걸림
+    _patch(monkeypatch, fake, fake_gripper)
+
+    result = ur3e_driver.place_driver(_action(ActionType.PLACE, dest_location="vial_rack"))
+
+    assert result["success"] is False
 
 
 def test_retract_driver_always_targets_home(monkeypatch):
@@ -209,3 +290,51 @@ def test_get_receive_connection_raises_clear_error_without_ur_rtde_installed(mon
 
     with pytest.raises(RuntimeError, match="ur_rtde"):
         ur3e_driver.get_receive_connection()
+
+
+# ── 그리퍼 (robotiq_gripper) ────────────────────────────────────────
+def test_grip_succeeds_on_outer_or_inner_object(monkeypatch):
+    for obj_status in (ur3e_driver.OBJ_STOPPED_OUTER, ur3e_driver.OBJ_STOPPED_INNER):
+        fake_gripper = FakeGripper(obj_status_after_close=obj_status)
+        monkeypatch.setattr(ur3e_driver, "get_gripper", lambda fg=fake_gripper: fg)
+
+        result = ur3e_driver.grip()
+
+        assert result["success"] is True
+
+
+def test_grip_fails_when_no_object_detected(monkeypatch):
+    fake_gripper = FakeGripper(obj_status_after_close=ur3e_driver.OBJ_AT_DEST_NO_OBJECT)
+    monkeypatch.setattr(ur3e_driver, "get_gripper", lambda: fake_gripper)
+
+    result = ur3e_driver.grip()
+
+    assert result["success"] is False
+
+
+def test_release_succeeds_when_no_object_remains(monkeypatch):
+    fake_gripper = FakeGripper(obj_status_after_open=ur3e_driver.OBJ_AT_DEST_NO_OBJECT)
+    monkeypatch.setattr(ur3e_driver, "get_gripper", lambda: fake_gripper)
+
+    result = ur3e_driver.release()
+
+    assert result["success"] is True
+
+
+def test_get_gripper_raises_clear_error_without_robotiq_gripper_installed(monkeypatch):
+    monkeypatch.setattr(ur3e_driver, "robotiq_gripper", None)
+    monkeypatch.setattr(ur3e_driver, "_gripper", None)
+
+    with pytest.raises(RuntimeError, match="robotiq_gripper"):
+        ur3e_driver.get_gripper()
+
+
+def test_get_gripper_activates_if_not_already_active(monkeypatch):
+    fake_module = type("FakeModule", (), {"RobotiqGripper": lambda host, port: FakeGripper()})
+    monkeypatch.setattr(ur3e_driver, "robotiq_gripper", fake_module)
+    monkeypatch.setattr(ur3e_driver, "_gripper", None)
+
+    gripper = ur3e_driver.get_gripper()
+
+    assert gripper.connected is True
+    assert gripper.activated is True

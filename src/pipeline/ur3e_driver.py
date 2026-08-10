@@ -7,11 +7,10 @@ ur_rtde로 PICK / PLACE / MOUNT / RETRACT를 구현한다.
 - rtde_control_interface.h (1순위): 이동 명령(moveL), 안전범위 사전 체크
 - rtde_receive_interface.h (2순위): 비상/보호정지 상태 사전 체크, 이동 완료 후
   실제 TCP 위치를 재확인하는 이중 검증
+- robotiq_gripper.h (3순위): PICK에서 실제로 물체를 쥐는지, PLACE에서 놓는지
+  OBJ 변수(0=이동중,1/2=그립 성공,3=물체 없음)로 확인
 
-설치: pip install ur-rtde
-
-아직 못 채운 부분 (다음 문서 필요):
-- 그리퍼 열기/닫기 실제 동작 — robotiq_gripper.h(3순위) 확보 후 pick_driver/place_driver에 추가
+설치: pip install ur-rtde robotiq-gripper (또는 해당 바인딩 패키지)
 
 사용법 (Prefect flow 시작 전 한 번 호출):
     from src.pipeline.ur3e_driver import register_ur3e_drivers
@@ -38,6 +37,11 @@ try:
 except ImportError:
     rtde_receive = None
 
+try:
+    import robotiq_gripper  # type: ignore
+except ImportError:
+    robotiq_gripper = None
+
 UR3E_HOST = os.getenv("UR3E_HOST", "192.168.1.100")  # TODO: 실제 로봇 IP로 교체
 
 # 이동 완료 후 "목표 위치에 진짜 도착했는지" 판정하는 허용 오차 (미터, TCP xyz 기준).
@@ -53,6 +57,59 @@ LOCATION_POSES: dict[str, list[float]] = {
     "balance_center": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     "home": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # RETRACT가 돌아가는 안전 위치
 }
+
+GRIPPER_PORT = 63352  # Robotiq 그리퍼는 로봇 컨트롤러 IP의 이 포트로 접속 (매뉴얼 기본값)
+
+# OBJ 변수 의미 (매뉴얼에 명시된 정확한 값 — eObjectStatus enum 대신 이 변수를 직접 읽어서 판정)
+OBJ_MOVING = 0
+OBJ_STOPPED_OUTER = 1  # 바깥쪽에서 물체 감지 (grip 성공)
+OBJ_STOPPED_INNER = 2  # 안쪽에서 물체 감지 (grip 성공)
+OBJ_AT_DEST_NO_OBJECT = 3  # 목표 위치 도달, 물체 없음 (release 성공 / grip 실패)
+
+_gripper = None  # RobotiqGripper 싱글턴
+
+
+def get_gripper(host: str = UR3E_HOST, port: int = GRIPPER_PORT):
+    """
+    RobotiqGripper 연결을 하나만 유지한다. 최초 연결 시 activate까지 자동으로 해준다
+    (활성화 안 된 그리퍼는 move 명령이 안 먹힘).
+    """
+    global _gripper
+    if robotiq_gripper is None:
+        raise RuntimeError("robotiq_gripper 모듈이 설치되어 있지 않습니다.")
+    if _gripper is None:
+        _gripper = robotiq_gripper.RobotiqGripper(host, port)
+        _gripper.connect()
+        if not _gripper.isActive():
+            _gripper.activate()
+    return _gripper
+
+
+def grip() -> dict:
+    """
+    PICK에서 물체를 쥐는 동작. 그리퍼를 닫고, OBJ 변수로 실제로 뭔가 걸렸는지 확인한다.
+    OBJ가 1(바깥쪽 그립) 또는 2(안쪽 그립)면 성공, 3(물체 없이 끝까지 닫힘)이면 실패
+    (허공을 쥔 것 — 헤드/바이알이 예상 위치에 없었다는 뜻).
+    """
+    gripper = get_gripper()
+    gripper.close()
+    gripper.waitForMotionComplete()
+    obj_status = gripper.getVar("OBJ")
+    gripped = obj_status in (OBJ_STOPPED_OUTER, OBJ_STOPPED_INNER)
+    return {"success": gripped, "object_status": obj_status}
+
+
+def release() -> dict:
+    """
+    PLACE에서 물체를 놓는 동작. 그리퍼를 열고, OBJ가 3(물체 없이 정지)인지 확인한다.
+    """
+    gripper = get_gripper()
+    gripper.open()
+    gripper.waitForMotionComplete()
+    obj_status = gripper.getVar("OBJ")
+    released = obj_status == OBJ_AT_DEST_NO_OBJECT
+    return {"success": released, "object_status": obj_status}
+
 
 _connection = None          # RTDEControlInterface 싱글턴 (이동 명령용)
 _receive_connection = None  # RTDEReceiveInterface 싱글턴 (상태 읽기용)
@@ -141,17 +198,23 @@ def _move_to(location: Optional[str], speed: float = 0.25, acceleration: float =
 
 # ── ActionDriver 구현 (action_driver.py의 ACTION_DRIVERS에 등록될 함수들) ──
 def pick_driver(action: Action) -> dict:
-    """PICK: source_location으로 이동. 그리퍼 닫기는 TODO (robotiq_gripper.h 필요)."""
-    result = _move_to(action.source_location)
-    # TODO: gripper.close() — Robotiq 그리퍼 API 문서 확보 후 추가
-    return result
+    """PICK: source_location으로 이동한 뒤, 그리퍼를 닫아서 실제로 물체를 쥔다."""
+    move_result = _move_to(action.source_location)
+    if not move_result.get("success"):
+        return move_result  # 이동 자체가 실패하면 그리퍼는 시도하지 않음
+
+    grip_result = grip()
+    return {"success": grip_result["success"], **grip_result}
 
 
 def place_driver(action: Action) -> dict:
-    """PLACE: dest_location으로 이동. 그리퍼 열기는 TODO (robotiq_gripper.h 필요)."""
-    result = _move_to(action.dest_location)
-    # TODO: gripper.open() — Robotiq 그리퍼 API 문서 확보 후 추가
-    return result
+    """PLACE: dest_location으로 이동한 뒤, 그리퍼를 열어서 물체를 놓는다."""
+    move_result = _move_to(action.dest_location)
+    if not move_result.get("success"):
+        return move_result  # 이동 자체가 실패하면 그리퍼는 시도하지 않음
+
+    release_result = release()
+    return {"success": release_result["success"], **release_result}
 
 
 def mount_driver(action: Action) -> dict:
