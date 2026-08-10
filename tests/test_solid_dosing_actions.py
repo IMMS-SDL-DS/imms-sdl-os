@@ -35,13 +35,13 @@ def _make_dispense_task(task_id="exp1_dispense1"):
 
 
 # ── Action 시퀀스 (15단계: STABILIZE 2회 추가) ─────────────────────────
-def test_build_solid_dosing_actions_creates_15_steps():
-    """12단계 workflow가 RETRACT+DOOR_CLOSE 분리 + STABILIZE 2회 추가로 15개가 되어야 함."""
+def test_build_solid_dosing_actions_creates_16_steps():
+    """12단계 workflow가 RETRACT×2 + DOOR_CLOSE 분리 + STABILIZE 2회 추가로 16개가 되어야 함."""
     task = _make_dispense_task()
     actions = task.build_solid_dosing_actions()
 
-    assert len(actions) == 15
-    assert len(task.actions) == 15
+    assert len(actions) == 16
+    assert len(task.actions) == 16
     assert all(isinstance(a, Action) for a in actions)
 
 
@@ -54,11 +54,11 @@ def test_action_sequence_order_matches_workflow():
         ActionType.PICK, ActionType.MOUNT, ActionType.PICK, ActionType.DOOR_OPEN,
         ActionType.PLACE, ActionType.RETRACT, ActionType.DOOR_CLOSE,
         ActionType.STABILIZE, ActionType.DOSE, ActionType.STABILIZE,
-        ActionType.DOOR_OPEN, ActionType.PICK, ActionType.DOOR_CLOSE,
+        ActionType.DOOR_OPEN, ActionType.PICK, ActionType.RETRACT, ActionType.DOOR_CLOSE,
         ActionType.PLACE, ActionType.PLACE,
     ]
     assert [a.action_type for a in actions] == expected_types
-    assert [a.sequence_index for a in actions] == list(range(1, 16))
+    assert [a.sequence_index for a in actions] == list(range(1, 17))
 
 
 def test_stabilize_actions_have_wait_parameters():
@@ -73,20 +73,23 @@ def test_stabilize_actions_have_wait_parameters():
         assert "max_wait_sec" in a.parameters
 
 
-def test_only_door_close_after_retract_is_safety_critical():
-    """RETRACT 직후 DOOR_CLOSE(7번)만 safety_critical=True, 나머지는 False."""
+def test_door_close_after_retract_is_safety_critical():
+    """두 DOOR_CLOSE(7번, 14번) 모두 직전 RETRACT 확인이 필요 — 대칭 설계 (로봇-문 충돌 방지)."""
     task = _make_dispense_task()
     actions = task.build_solid_dosing_actions()
 
     safety_critical_indices = [a.sequence_index for a in actions if a.safety_critical]
-    assert safety_critical_indices == [7]
+    assert safety_critical_indices == [7, 14]
 
 
 def test_validate_action_safety_order_passes_when_retract_succeeded():
+    """두 RETRACT→DOOR_CLOSE 쌍(7,14번) 모두 정상이면 예외가 없어야 함."""
     task = _make_dispense_task()
     task.build_solid_dosing_actions()
-    task.actions[5].status = "success"  # RETRACT (sequence 6)
-    task.actions[6].status = "running"  # DOOR_CLOSE (sequence 7)
+    task.actions[5].status = "success"   # RETRACT #6
+    task.actions[6].status = "running"   # DOOR_CLOSE #7
+    task.actions[12].status = "success"  # RETRACT #13
+    task.actions[13].status = "running"  # DOOR_CLOSE #14
 
     task.validate_action_safety_order()  # 예외 없이 통과해야 함
 
@@ -101,8 +104,21 @@ def test_validate_action_safety_order_raises_when_retract_failed():
         task.validate_action_safety_order()
 
 
+def test_validate_action_safety_order_raises_on_second_retract_door_close_pair():
+    """두 번째 RETRACT(13번)가 실패해도 대칭적으로 안전 위반이 잡혀야 함."""
+    task = _make_dispense_task()
+    task.build_solid_dosing_actions()
+    task.actions[5].status = "success"
+    task.actions[6].status = "success"
+    task.actions[12].status = "failed"   # RETRACT #13 실패
+    task.actions[13].status = "running"  # DOOR_CLOSE #14
+
+    with pytest.raises(ValueError, match="안전 순서 위반"):
+        task.validate_action_safety_order()
+
+
 def test_action_sequence_template_length():
-    assert len(SOLID_DOSING_ACTION_SEQUENCE) == 15
+    assert len(SOLID_DOSING_ACTION_SEQUENCE) == 16
 
 
 # ── Material 추적 + 오차율 ────────────────────────────────────────────
