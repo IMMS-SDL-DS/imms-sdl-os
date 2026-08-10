@@ -265,6 +265,13 @@ class Experiment(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     notes: list[str] = []
 
+    # ── Run 메타데이터 (실험팀 Run 기록 시트 기반, docs/precursor_catalog_and_run_metadata.md) ──
+    execution_mode: Literal["manual", "auto"] = "manual"
+    # 지금 실험팀 기록은 전부 "manual" — 자동화(Prefect+로봇)가 완성되기 전까지는
+    # 사람이 손으로 한 실험도 같은 스키마로 관리해야 하므로 이 필드로 구분한다.
+    sample_count: Optional[int] = None
+    project_description: Optional[str] = None
+
 
 # ─────────────────────────────────────────────────────────────
 # Action 레벨 모델 — Task(예: DISPENSE_SOLID) 내부의 세부 로봇/저울 동작.
@@ -376,6 +383,31 @@ class MaterialRole(str, Enum):
     MODULATOR = "modulator"
 
 
+# ─────────────────────────────────────────────────────────────
+# 물질 마스터 카탈로그 (실험팀 고체 전구체 리스트 기반,
+# docs/precursor_catalog_and_run_metadata.md §2)
+# ─────────────────────────────────────────────────────────────
+
+class PrecursorCatalog(BaseModel):
+    """
+    실험실에 등록된 전구체(원료) 물질의 마스터 정보 — "이 물질이 뭐고, 어디 있는지".
+    MaterialUsage("이번에 얼마나 썼는지")와는 목적이 달라 별도 모델로 분리.
+    MaterialUsage.precursor_id로 명시적으로 참조된다 (이름 매칭보다 안전한 방식,
+    설계 문서 §2의 "방식 B" 채택).
+    """
+    precursor_id: str          # "MSP0001" — 실험팀 표의 SolidPrecursorID 그대로
+    name: str                  # "Zinc oxide"
+    cas_number: Optional[str] = None
+    smiles: Optional[str] = None
+    formula: Optional[str] = None
+    vendor: Optional[str] = None
+    received_date: Optional[datetime] = None
+    storage_location: Optional[str] = None
+    package_scale: Optional[float] = None
+    package_unit: Optional[str] = None      # "g", "mL" 등
+    notes: Optional[str] = None
+
+
 class MaterialUsage(BaseModel):
     """
     DISPENSE_SOLID Task 하나에 자연스럽게 1:1로 붙는 실제 사용 물질 기록.
@@ -384,6 +416,7 @@ class MaterialUsage(BaseModel):
     """
     material_name: str              # "ZrOCl2"
     role: MaterialRole
+    precursor_id: Optional[str] = None         # PrecursorCatalog.precursor_id 참조
     concentration: Optional[float] = None
     concentration_unit: Optional[str] = None   # "M", "mg/mL" 등
     target_mass_mg: float

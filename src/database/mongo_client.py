@@ -282,6 +282,25 @@ def get_pipeline_summary(db: Database, experiment_id: str) -> list[dict]:
     return summary
 
 
+# ── 물질 카탈로그 (PrecursorCatalog) 저장/조회 ─────────────────────────
+def register_precursor(db: Database, precursor) -> None:
+    """PrecursorCatalog를 precursor_id 기준으로 등록/갱신 (upsert)."""
+    db["precursor_catalog"].update_one(
+        {"precursor_id": precursor.precursor_id},
+        {"$set": precursor.model_dump()},
+        upsert=True,
+    )
+
+
+def get_precursor(db: Database, precursor_id: str) -> Optional[dict]:
+    return db["precursor_catalog"].find_one({"precursor_id": precursor_id})
+
+
+def find_precursor_by_name(db: Database, name: str) -> Optional[dict]:
+    """이름으로 카탈로그 조회 (precursor_id를 모를 때, 등록 시점에 매칭 확인용)."""
+    return db["precursor_catalog"].find_one({"name": name})
+
+
 if __name__ == "__main__":
     # 연결 테스트: python -m src.database.mongo_client
     database = get_database()
