@@ -4,8 +4,8 @@ Prefect + MongoDB에 실제로 연동해서 실행한 결과입니다.
 
 ## 1) 정상 실행
 
-![Prefect 정상 실행](images/prefect_flow_1.png)
-![Prefect 정상 실행](images/prefect_flow_2.png)
+![Prefect 정상 실행](images/flow_1.png)
+![Prefect 정상 실행](images/flow_2.png)
 
 16개 Action이 build → execute → save 순서로 전부 Completed 상태로
 실행된 것을 Prefect UI에서 확인했습니다.
