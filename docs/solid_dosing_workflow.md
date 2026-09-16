@@ -1,4 +1,4 @@
-# 🧪 고체 분주(Solid Dosing) 워크플로우 — 설계 문서
+# 고체 분주(Solid Dosing) 워크플로우 — 설계 문서
 
 > 지금까지 만든 `DISPENSE_SOLID`는 Task 레벨의 큰 덩어리였는데,
 > 실제 MultiDose 로봇팔+저울은 그 안에서 12단계로 세분화된 동작을 거친다.
