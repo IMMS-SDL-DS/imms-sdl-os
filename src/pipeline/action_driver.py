@@ -44,7 +44,7 @@ from src.hardware.balance_mtsics import (
 ActionDriver = Callable[[Action], dict]
 
 
-# ── 로봇 제어팀이 채워 넣을 자리. 지금은 전부 시뮬레이션 함수로 등록되어 있음. ──
+# ── 연동 시 채워 넣을 자리. 지금은 전부 시뮬레이션 함수로 등록되어 있음. ──
 def _simulated_driver(action: Action) -> dict:
     """실제 함수가 등록되기 전까지 쓰는 기본 시뮬레이션."""
     print(f"    [SIM-Action] {action.action_type.value} (#{action.sequence_index})")
@@ -63,7 +63,7 @@ ACTION_DRIVERS: dict[ActionType, ActionDriver] = {
 
 
 def register_action_driver(action_type: ActionType, driver: ActionDriver) -> None:
-    """로봇 제어팀의 실제 함수를 등록. 예: register_action_driver(ActionType.PICK, pick_driver)"""
+    """로봇 실제 함수를 등록. 예: register_action_driver(ActionType.PICK, pick_driver)"""
     ACTION_DRIVERS[action_type] = driver
 
 
