@@ -1,4 +1,4 @@
-# IMMS SDL-OS — Self-Driving Laboratory Operating System
+# 🧪 IMMS SDL-OS — Self-Driving Laboratory Operating System
 
 > **이화여자대학교 IMMS (Institute for Multiscale Materials and Systems)**
 > 국가연구소(NRL 2.0) 1기 학부 인턴 연구 기록
