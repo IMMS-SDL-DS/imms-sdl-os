@@ -79,6 +79,37 @@ MONGODB_DB_NAME=imms_sdl_os
 
 접속 문자열은 MongoDB Atlas 콘솔 → 해당 클러스터 → **Connect** → **Drivers**에서 확인할 수 있습니다.
 
+server //
+<img width="1482" height="799" alt="image" src="https://github.com/user-attachments/assets/2804b1cb-ebd9-4fc4-a851-5c7b9f07cc1c" />
+C:\Users\AMSL>cd C:\Users\AMSL\miniconda3\condabin
+
+C:\Users\AMSL\miniconda3\condabin>conda activate
+
+(base) C:\Users\AMSL\miniconda3\condabin>conda activate sdl
+
+(sdl) C:\Users\AMSL\miniconda3\condabin>cd  C:\Users\AMSL\Desktop\imms_sdl_os\imms-sdl-os
+
+(sdl) C:\Users\AMSL\Desktop\imms_sdl_os\imms-sdl-os>prefect config view
+🚀 you are connected to:
+https://127.0.0.1:4200
+PREFECT_PROFILE='local'
+PREFECT_API_URL='https://127.0.0.1:4200/api' (from profile)
+
+(sdl) C:\Users\AMSL\Desktop\imms_sdl_os\imms-sdl-os>python -m prefect server start
+
+ ___ ___ ___ ___ ___ ___ _____
+| _ \ _ \ __| __| __/ __|_   _|
+|  _/   / _|| _|| _| (__  | |
+|_| |_|_\___|_| |___\___| |_|
+
+Configure Prefect to communicate with the server with:
+
+    prefect config set PREFECT_API_URL=http://127.0.0.1:4200/api
+
+View the API reference documentation at http://127.0.0.1:4200/docs
+
+Check out the dashboard at http://127.0.0.1:4200
+
 ### 3-1. MongoDB Atlas 계정이 아직 없다면 (Database Access 유저 새로 만들기)
 
 담당자(또는 기존 admin 권한자)가 Atlas 콘솔에서:
