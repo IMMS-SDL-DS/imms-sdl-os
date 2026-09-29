@@ -1,6 +1,9 @@
 """
-SDL 데이터 수집 파이프라인 예시 (Prefect 기반)
-실제 구현 전 구조를 잡기 위한 템플릿
+[LEGACY / 템플릿] SDL 데이터 수집 파이프라인 예시 (Prefect 기반)
+
+실제 구현 전 구조를 잡기 위해 초기에 작성한 템플릿 코드입니다.
+현재 실제로 동작하는 flow는 zr_btc_synthesis_flow.py / live_16step_flow.py이며,
+이 파일은 실행되지 않습니다. 구조 참고용으로만 남겨둡니다.
 """
 
 from prefect import flow, task
