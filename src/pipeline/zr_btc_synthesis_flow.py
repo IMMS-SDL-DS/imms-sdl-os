@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from prefect import flow, get_run_logger, task
+from prefect.cache_policies import NO_CACHE
 
 from src.database.models import (
     OperationType,
@@ -44,13 +45,14 @@ def load_protocol(path: Path = PROTOCOL_PATH) -> dict:
 # 기본 retries=0: 물리적 부작용이 있는 오퍼레이션은 재시도하면 위험할 수 있어
 # "재시도 안 함"을 안전한 기본값으로 둔다. 측정/판독처럼 안전한 오퍼레이션만
 # _call_execute_step()에서 명시적으로 retries=1을 적용한다.
-@task(name="execute_unit_operation", retries=0)
+@task(name="execute_unit_operation", retries=0, cache_policy=NO_CACHE)
 def execute_step(
     experiment_id: str,
     phase: str,
     step: dict[str, Any],
     db=None,
 ) -> Task:
+    
     logger = get_run_logger()
     operation = OperationType(step["operation"])
     params = validate_operation_params(operation, step["parameters"])
@@ -168,7 +170,7 @@ def _step_in_range(step_code: str, start: str, end: str) -> bool:
 # ── 메인 Flow: 전체 프로토콜(Phase A~G) 실행 ──────────────────────────
 @flow(name="Zr-BTC-MOF-Synthesis", log_prints=True)
 def zr_btc_synthesis_flow(
-    experiment_id: str = "exp_zrbtc_001",
+    experiment_id: str = "exp_zrbtc_002",
     protocol_path: Optional[Path] = None,
     save_to_db: bool = True,
 ):
